@@ -38,4 +38,4 @@ async function seed() {
     console.log("La base de donnees existe deja, aucun changement.");
   }
 }
-seed().catch(console.error);
+seed().catch(console.error).finally(()=>process.exit(0));
