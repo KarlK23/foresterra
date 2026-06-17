@@ -42,7 +42,7 @@
     if (!pdfId || !pageNum) return '';
     var pdf = state.pdfs.find(function(p){return p.id===pdfId;});
     if (!pdf) return '';
-    var url = pdf.filename;
+    var url = '/api/proxy-pdf?url='+encodeURIComponent(pdf.filename);
     return '<div style="margin-bottom:12px;border-radius:10px;overflow:hidden;border:1px solid #e0ddd5;background:#f9faf7;">'+
       '<div style="padding:6px 12px;background:#e8f5ef;display:flex;justify-content:space-between;align-items:center;">'+
         '<span style="font-size:11px;font-weight:600;color:#0f6e56;">📄 Page '+pageNum+' — '+esc(pdf.originalName)+'</span>'+
@@ -531,7 +531,7 @@
     overlay.addEventListener("click", closePdfModal);
     modal.addEventListener("click", function(e){e.stopPropagation();});
     bindPdfAcheteurBtns();
-    analyzePdfDates(filename,
+    analyzePdfDates('/api/proxy-pdf?url='+encodeURIComponent(filename),
       function(i,total){
         var el=document.getElementById("modal-page-list");
         if(el) el.innerHTML='<p style="color:#6f6e69;font-size:13px;text-align:center;margin-top:20px;">⏳ Lecture page '+i+'/'+total+'…</p>';
@@ -808,7 +808,7 @@
   // Sélecteur de pages acheteur
   function openPdfPageSelectorAcheteur(pdfId, filename) {
     state.pdfSelectorId=pdfId; state.pdfSelectedPages=[]; state.pdfPages=[];
-    var url=filename;
+    var url='/api/proxy-pdf?url='+encodeURIComponent(filename);
     var overlay=document.getElementById("pdf-modal-overlay");
     var modal  =document.getElementById("pdf-modal");
     overlay.style.cssText="display:block;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100;";
