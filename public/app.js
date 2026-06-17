@@ -168,7 +168,7 @@
       '<div id="fiche-modal-overlay" style="display:none;"></div>'+
       '<div id="fiche-modal" style="display:none;"></div>';
     document.getElementById("btn-logout").addEventListener("click", logout);
-    document.getElementById("patron-content").addEventListener("change", function(e){
+    root.addEventListener("change", function(e){
       if(e.target && e.target.id==="filtre-acheteur"){ state.filtreAcheteur=e.target.value||null; renderPatronContent(); }
       if(e.target && e.target.id==="filtre-pdf"){ state.filtrePdf=e.target.value||null; renderPatronContent(); }
     });
