@@ -174,7 +174,6 @@
     });
     document.getElementById("patron-content").addEventListener("click", function(e){
       if(e.target && e.target.id==="btn-reset-filtres"){ state.filtreAcheteur=null; state.filtrePdf=null; renderPatronContent(); }
-      }
       if(e.target && e.target.id==="btn-upload-pdf"){
         var input=document.getElementById("pdf-file-input");
         if(!input||!input.files||!input.files[0]){alert("Choisis un fichier PDF.");return;}
