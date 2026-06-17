@@ -132,31 +132,23 @@ app.delete("/api/acheteurs/:id", requirePatron, function (req, res) {
 // ---------- PDF UPLOAD ----------
 app.post("/api/pdfs", requirePatron, function (req, res) {
   upload.single("pdf")(req, res, function (err) {
-    if (err) {
-      console.error("Erreur upload PDF:", err);
-      return res.status(500).json({ error: "Erreur upload: " + err.message });
-    }
-
+    if (err) return res.status(500).json({ error: "Erreur upload: " + err.message });
     if (!req.file) return res.status(400).json({ error: "Aucun fichier" });
-
-    try {
-      const db = loadDb();
-      if (!Array.isArray(db.pdfs)) db.pdfs = [];
-
-      const pdfEntry = {
-        id: path.parse(req.file.filename).name,
-        originalName: req.file.originalname,
-        filename: req.file.filename,
-        uploadedAt: new Date().toISOString()
-      };
-      db.pdfs.push(pdfEntry);
-      saveDb(db);
-
-      res.json({ pdf: pdfEntry });
-    } catch (e) {
-      console.error("Erreur sauvegarde PDF:", e);
-      res.status(500).json({ error: "Erreur serveur: " + e.message });
-    }
+    const id = genId("pdf");
+    const {Readable} = require("stream");
+    const stream = cloudinary.uploader.upload_stream(
+      { resource_type: "raw", public_id: id, folder: "foresterra", format: "pdf" },
+      function(error, result) {
+        if (error) return res.status(500).json({ error: "Cloudinary: " + error.message });
+        const db = loadDb();
+        if (!Array.isArray(db.pdfs)) db.pdfs = [];
+        const pdfEntry = { id, originalName: req.file.originalname, filename: result.secure_url, uploadedAt: new Date().toISOString() };
+        db.pdfs.push(pdfEntry);
+        saveDb(db);
+        res.json({ pdf: pdfEntry });
+      }
+    );
+    Readable.from(req.file.buffer).pipe(stream);
   });
 });
 
