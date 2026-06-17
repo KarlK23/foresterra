@@ -5,12 +5,16 @@ function genId(prefix) {
 }
 async function seed() {
   const db = await loadDb();
-  console.log("Reinitialisation des comptes...");
-  db.users = [];
-  db.users.push({ id:genId("u"), username:"patron", passwordHash:bcrypt.hashSync("patron123",10), role:"patron", nom:"Patron" });
-  db.users.push({ id:genId("u"), username:"marius.dalle", passwordHash:bcrypt.hashSync("acheteur123",10), role:"acheteur", nom:"Marius Dalle" });
-  db.users.push({ id:genId("u"), username:"bois.co", passwordHash:bcrypt.hashSync("acheteur123",10), role:"acheteur", nom:"Bois & Co" });
+  const hash1 = bcrypt.hashSync("patron123", 10);
+  const hash2 = bcrypt.hashSync("acheteur123", 10);
+  console.log("Hash patron:", hash1);
+  console.log("Hash acheteur:", hash2);
+  db.users = [
+    { id:genId("u"), username:"patron", passwordHash:hash1, role:"patron", nom:"Patron" },
+    { id:genId("u"), username:"marius.dalle", passwordHash:hash2, role:"acheteur", nom:"Marius Dalle" },
+    { id:genId("u"), username:"bois.co", passwordHash:hash2, role:"acheteur", nom:"Bois & Co" }
+  ];
   await saveDb(db);
-  console.log("Comptes recrees !");
+  console.log("OK - comptes recrees");
 }
 seed().catch(console.error).finally(()=>process.exit(0));
