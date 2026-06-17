@@ -24,7 +24,7 @@ app.use("/uploads", express.static(UPLOADS_DIR));
 
 app.use(
   session({
-    secret: "forestera-dev-secret-change-me",
+    secret: "process.env.SESSION_SECRET||"foresterra-secret-2026"",
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 } // 7 jours
