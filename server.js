@@ -31,7 +31,7 @@ app.use(
   })
 );
 
-const upload = multer({ storage: multer.diskStorage({destination:function(req,file,cb){cb(null,UPLOADS_DIR);},filename:function(req,file,cb){cb(null,genId("tmp")+".pdf");}}), limits: { fileSize: 200 * 1024 * 1024 } });
+const upload = multer({ storage: multer.diskStorage({destination:function(req,file,cb){cb(null,UPLOADS_DIR);},filename:function(req,file,cb){cb(null,"tmp_"+Math.random().toString(36).slice(2,9)+".pdf");}}), limits: { fileSize: 200 * 1024 * 1024 } });
 
 function genId(prefix) {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
