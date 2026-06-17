@@ -53,7 +53,7 @@ function requirePatron(req, res, next) {
 // ---------- AUTH ROUTES ----------
 app.post("/api/login", function (req, res) {
   const { username, password } = req.body;
-  const db = loadDb();
+  const db = await loadDb();
   const user = db.users.find(function (u) {
     return u.username === username;
   });
@@ -77,8 +77,8 @@ app.get("/api/me", function (req, res) {
 });
 
 // ---------- PATRON: GESTION ACHETEURS ----------
-app.get("/api/acheteurs", requireAuth, function (req, res) {
-  const db = loadDb();
+app.get("/api/acheteurs", requireAuth, async function (req, res) {
+  const db = await loadDb();
   const acheteurs = db.users
     .filter(function (u) {
       return u.role === "acheteur";
@@ -89,13 +89,13 @@ app.get("/api/acheteurs", requireAuth, function (req, res) {
   res.json({ acheteurs: acheteurs });
 });
 
-app.post("/api/acheteurs", requirePatron, function (req, res) {
+app.post("/api/acheteurs", requirePatron, async function (req, res) {
   const { username, password, nom } = req.body;
   if (!username || !password || !nom) {
     return res.status(400).json({ error: "Champs manquants" });
   }
 
-  const db = loadDb();
+  const db = await loadDb();
   if (db.users.find(function (u) { return u.username === username; })) {
     return res.status(409).json({ error: "Cet identifiant existe deja" });
   }
@@ -108,13 +108,13 @@ app.post("/api/acheteurs", requirePatron, function (req, res) {
     nom: nom
   };
   db.users.push(newUser);
-  saveDb(db);
+  await saveDb(db);
 
   res.json({ acheteur: { id: newUser.id, username: newUser.username, nom: newUser.nom } });
 });
 
-app.delete("/api/acheteurs/:id", requirePatron, function (req, res) {
-  const db = loadDb();
+app.delete("/api/acheteurs/:id", requirePatron, async function (req, res) {
+  const db = await loadDb();
   const id = req.params.id;
   db.users = db.users.filter(function (u) {
     return u.id !== id;
@@ -125,12 +125,12 @@ app.delete("/api/acheteurs/:id", requirePatron, function (req, res) {
   db.retours = db.retours.filter(function (r) {
     return r.acheteurId !== id;
   });
-  saveDb(db);
+  await saveDb(db);
   res.json({ ok: true });
 });
 
 // ---------- PDF UPLOAD ----------
-app.post("/api/pdfs", requirePatron, function (req, res) {
+app.post("/api/pdfs", requirePatron, async function (req, res) {
   upload.single("pdf")(req, res, function (err) {
     if (err) return res.status(500).json({ error: "Erreur upload: " + err.message });
     if (!req.file) return res.status(400).json({ error: "Aucun fichier" });
@@ -140,11 +140,11 @@ app.post("/api/pdfs", requirePatron, function (req, res) {
       { resource_type: "raw", public_id: id, folder: "foresterra", use_filename: true, unique_filename: false },
       function(error, result) {
         if (error) return res.status(500).json({ error: "Cloudinary: " + error.message });
-        const db = loadDb();
+        const db = await loadDb();
         if (!Array.isArray(db.pdfs)) db.pdfs = [];
         const pdfEntry = { id, originalName: req.file.originalname, filename: result.secure_url, uploadedAt: new Date().toISOString() };
         db.pdfs.push(pdfEntry);
-        saveDb(db);
+        await saveDb(db);
         res.json({ pdf: pdfEntry });
       }
     );
@@ -152,13 +152,13 @@ app.post("/api/pdfs", requirePatron, function (req, res) {
   });
 });
 
-app.get("/api/pdfs", requireAuth, function (req, res) {
-  const db = loadDb();
+app.get("/api/pdfs", requireAuth, async function (req, res) {
+  const db = await loadDb();
   res.json({ pdfs: db.pdfs || [] });
 });
 
-app.delete("/api/pdfs/:id", requirePatron, function (req, res) {
-  const db = loadDb();
+app.delete("/api/pdfs/:id", requirePatron, async function (req, res) {
+  const db = await loadDb();
   const id = req.params.id;
   const pdfEntry = db.pdfs.find(function (p) { return p.id === id; });
   if (pdfEntry) {
@@ -166,13 +166,13 @@ app.delete("/api/pdfs/:id", requirePatron, function (req, res) {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
   db.pdfs = db.pdfs.filter(function (p) { return p.id !== id; });
-  saveDb(db);
+  await saveDb(db);
   res.json({ ok: true });
 });
 
 // ---------- PARCELLES ----------
-app.get("/api/parcelles", requireAuth, function (req, res) {
-  const db = loadDb();
+app.get("/api/parcelles", requireAuth, async function (req, res) {
+  const db = await loadDb();
   const user = req.session.user;
 
   if (user.role === "patron") {
@@ -198,11 +198,11 @@ app.get("/api/parcelles", requireAuth, function (req, res) {
   res.json({ parcelles: mesParcelles, retours: mesRetours });
 });
 
-app.post("/api/parcelles", requirePatron, function (req, res) {
+app.post("/api/parcelles", requirePatron, async function (req, res) {
   const { lignes, pdfId, pageNums } = req.body;
   if (!Array.isArray(lignes)) return res.status(400).json({ error: "lignes doit etre un tableau" });
 
-  const db = loadDb();
+  const db = await loadDb();
   const maxOrdre = db.parcelles.reduce(function (m, p) {
     return Math.max(m, p.ordre || 0);
   }, 0);
@@ -219,24 +219,24 @@ app.post("/api/parcelles", requirePatron, function (req, res) {
     created.push(p);
   });
 
-  saveDb(db);
+  await saveDb(db);
   res.json({ parcelles: created });
 });
 
-app.delete("/api/parcelles/:id", requirePatron, function (req, res) {
-  const db = loadDb();
+app.delete("/api/parcelles/:id", requirePatron, async function (req, res) {
+  const db = await loadDb();
   const id = req.params.id;
   db.parcelles = db.parcelles.filter(function (p) { return p.id !== id; });
   db.affectations = db.affectations.filter(function (a) { return a.parcelleId !== id; });
   db.retours = db.retours.filter(function (r) { return r.parcelleId !== id; });
-  saveDb(db);
+  await saveDb(db);
   res.json({ ok: true });
 });
 
 // ---------- AFFECTATIONS ----------
-app.post("/api/affectations", requirePatron, function (req, res) {
+app.post("/api/affectations", requirePatron, async function (req, res) {
   const { parcelleId, acheteurId, assign } = req.body;
-  const db = loadDb();
+  const db = await loadDb();
 
   const exists = db.affectations.find(function (a) {
     return a.parcelleId === parcelleId && a.acheteurId === acheteurId;
@@ -252,17 +252,17 @@ app.post("/api/affectations", requirePatron, function (req, res) {
     });
   }
 
-  saveDb(db);
+  await saveDb(db);
   res.json({ ok: true });
 });
 
 // ---------- RETOURS (acheteur) ----------
-app.post("/api/retours", requireAuth, function (req, res) {
+app.post("/api/retours", requireAuth, async function (req, res) {
   const user = req.session.user;
   if (user.role !== "acheteur") return res.status(403).json({ error: "Reserve aux acheteurs" });
 
   const { parcelleId, description, estimation, achete, prix, statut, fiche } = req.body;
-  const db = loadDb();
+  const db = await loadDb();
 
   // verify assignment
   const isAssigned = db.affectations.find(function (a) {
@@ -287,13 +287,13 @@ app.post("/api/retours", requireAuth, function (req, res) {
   retour.prix = achete ? (prix || "") : "";
   retour.date = new Date().toISOString();
 
-  saveDb(db);
+  await saveDb(db);
   res.json({ retour: retour });
 });
 
 // ---------- USERS (pour affichage noms dans vue patron) ----------
-app.get("/api/users-map", requireAuth, function (req, res) {
-  const db = loadDb();
+app.get("/api/users-map", requireAuth, async function (req, res) {
+  const db = await loadDb();
   const map = {};
   db.users.forEach(function (u) {
     map[u.id] = u.nom;
@@ -302,7 +302,7 @@ app.get("/api/users-map", requireAuth, function (req, res) {
 });
 
 // ---------- PARCELLES ACHETEUR (l'acheteur crée ses propres parcelles) ----------
-app.post("/api/parcelles-acheteur", requireAuth, function (req, res) {
+app.post("/api/parcelles-acheteur", requireAuth, async function (req, res) {
   const user = req.session.user;
   if (user.role !== "acheteur") return res.status(403).json({ error: "Réservé aux acheteurs" });
 
@@ -310,7 +310,7 @@ app.post("/api/parcelles-acheteur", requireAuth, function (req, res) {
   let idx = -1;
   if (!Array.isArray(lignes)) return res.status(400).json({ error: "lignes doit être un tableau" });
 
-  const db = loadDb();
+  const db = await loadDb();
   const maxOrdre = db.parcelles.reduce(function(m, p) { return Math.max(m, p.ordre || 0); }, 0);
 
   let ordre = maxOrdre;
@@ -343,14 +343,14 @@ app.post("/api/parcelles-acheteur", requireAuth, function (req, res) {
     }
   });
 
-  saveDb(db);
+  await saveDb(db);
   res.json({ parcelles: created, affectations: newAffectations });
 });
 
 // ---------- RETOURS PATRON (modification par le patron) ----------
-app.post("/api/retours-patron", requirePatron, function (req, res) {
+app.post("/api/retours-patron", requirePatron, async function (req, res) {
   const { parcelleId, acheteurId, description, estimation, achete, prix, statut, fiche } = req.body;
-  const db = loadDb();
+  const db = await loadDb();
 
   // Vérifier que la parcelle existe
   const parcelle = db.parcelles.find(function(p) { return p.id === parcelleId; });
@@ -373,7 +373,7 @@ app.post("/api/retours-patron", requirePatron, function (req, res) {
   retour.fiche       = fiche  || retour.fiche || null;
   retour.date        = new Date().toISOString();
 
-  saveDb(db);
+  await saveDb(db);
   res.json({ retour: retour });
 });
 
