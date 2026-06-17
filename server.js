@@ -138,7 +138,7 @@ app.post("/api/pdfs", requirePatron, async function (req, res) {
     const {Readable} = require("stream");
     const stream = cloudinary.uploader.upload_stream(
       { resource_type: "raw", public_id: id, folder: "foresterra", use_filename: true, unique_filename: false },
-      function(error, result) {
+      async function(error, result) {
         if (error) return res.status(500).json({ error: "Cloudinary: " + error.message });
         const db = await loadDb();
         if (!Array.isArray(db.pdfs)) db.pdfs = [];
