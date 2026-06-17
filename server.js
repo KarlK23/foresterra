@@ -7,7 +7,7 @@ const fs = require("fs");
 const { loadDb, saveDb } = require("./db");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 const DATA_DIR = path.join(__dirname, "data");
