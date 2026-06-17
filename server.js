@@ -391,6 +391,7 @@ app.use(function (err, req, res, next) {
   res.status(500).send("Erreur serveur");
 });
 
+app.use(function(req,res,next){res.setTimeout(300000);next()});
 app.listen(PORT, function () {
   console.log("Foresterra app demarree sur http://localhost:" + PORT);
 });
