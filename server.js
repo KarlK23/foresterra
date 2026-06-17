@@ -31,7 +31,7 @@ app.use(
   })
 );
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
+const upload = multer({ storage: multer.diskStorage({destination:function(req,file,cb){cb(null,UPLOADS_DIR);},filename:function(req,file,cb){cb(null,genId("tmp")+".pdf");}}), limits: { fileSize: 200 * 1024 * 1024 } });
 
 function genId(prefix) {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
@@ -148,7 +148,7 @@ app.post("/api/pdfs", requirePatron, function (req, res) {
         res.json({ pdf: pdfEntry });
       }
     );
-    Readable.from(req.file.buffer).pipe(stream);
+    fs.createReadStream(req.file.path).pipe(stream); stream.on("finish",function(){fs.unlink(req.file.path,function(){});});
   });
 });
 
