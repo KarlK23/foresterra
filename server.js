@@ -31,16 +31,7 @@ app.use(
   })
 );
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: function (req, file, cb) {
-    const id = genId("pdf");
-    cb(null, id + ".pdf");
-  }
-});
-const upload = multer({ storage: storage, limits: { fileSize: 100 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 function genId(prefix) {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
