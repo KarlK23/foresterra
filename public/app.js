@@ -516,7 +516,7 @@
         '<button id="btn-close-modal" style="font-size:20px;border:none;background:none;cursor:pointer;color:#6f6e69;padding:4px 8px;">✕</button></div>'+
       '<div style="display:flex;flex:1;overflow:hidden;">'+
         '<div style="flex:1;overflow:hidden;border-right:1px solid #e0ddd5;">'+
-          '<iframe src="'+filename+'" style="width:100%;height:100%;border:none;display:block;"></iframe></div>'+
+          '<iframe src="'+filename+'" style="width:100%;height:100%;border:none;display:block;" crossorigin="anonymous"></iframe></div>'+
         '<div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">'+
           '<div style="padding:10px 14px;border-bottom:1px solid #e0ddd5;flex-shrink:0;">'+
             '<p style="margin:0 0 6px;font-size:13px;font-weight:600;">Assigner à :</p>'+
