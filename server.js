@@ -51,7 +51,7 @@ function requirePatron(req, res, next) {
 }
 
 // ---------- AUTH ROUTES ----------
-app.post("/api/login", function (req, res) {
+app.post("/api/login", async function (req, res) {
   const { username, password } = req.body;
   const db = await loadDb();
   const user = db.users.find(function (u) {
@@ -66,13 +66,13 @@ app.post("/api/login", function (req, res) {
   res.json({ user: req.session.user });
 });
 
-app.post("/api/logout", function (req, res) {
+app.post("/api/logout", async function (req, res) {
   req.session.destroy(function () {
     res.json({ ok: true });
   });
 });
 
-app.get("/api/me", function (req, res) {
+app.get("/api/me", async function (req, res) {
   res.json({ user: req.session.user || null });
 });
 
@@ -394,7 +394,7 @@ app.get("/api/proxy-pdf", requireAuth, function(req, res) {
   });
 });
 // ---------- FALLBACK ----------
-app.get("/*splat", function (req, res) {
+app.get("/*splat", async function (req, res) {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
