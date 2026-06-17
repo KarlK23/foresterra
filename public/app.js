@@ -168,7 +168,13 @@
       '<div id="fiche-modal-overlay" style="display:none;"></div>'+
       '<div id="fiche-modal" style="display:none;"></div>';
     document.getElementById("btn-logout").addEventListener("click", logout);
+    document.getElementById("patron-content").addEventListener("change", function(e){
+      if(e.target && e.target.id==="filtre-acheteur"){ state.filtreAcheteur=e.target.value||null; renderPatronContent(); }
+      if(e.target && e.target.id==="filtre-pdf"){ state.filtrePdf=e.target.value||null; renderPatronContent(); }
+    });
     document.getElementById("patron-content").addEventListener("click", function(e){
+      if(e.target && e.target.id==="btn-reset-filtres"){ state.filtreAcheteur=null; state.filtrePdf=null; renderPatronContent(); }
+      }
       if(e.target && e.target.id==="btn-upload-pdf"){
         var input=document.getElementById("pdf-file-input");
         if(!input||!input.files||!input.files[0]){alert("Choisis un fichier PDF.");return;}
@@ -185,12 +191,7 @@
 
   function renderPatronContent() {
     var el = document.getElementById("patron-content");
-    var filtreAch=document.getElementById("filtre-acheteur");
-    if(filtreAch) filtreAch.addEventListener("change",function(){ state.filtreAcheteur=this.value||null; renderPatronContent(); });
-    var filtrePdf=document.getElementById("filtre-pdf");
-    if(filtrePdf) filtrePdf.addEventListener("change",function(){ state.filtrePdf=this.value||null; renderPatronContent(); });
-    var btnReset=document.getElementById("btn-reset-filtres");
-    if(btnReset) btnReset.addEventListener("click",function(){ state.filtreAcheteur=null; state.filtrePdf=null; renderPatronContent(); });
+    
     var html = "";
 
     // ─ PDF upload
