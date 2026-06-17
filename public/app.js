@@ -168,6 +168,18 @@
       '<div id="fiche-modal-overlay" style="display:none;"></div>'+
       '<div id="fiche-modal" style="display:none;"></div>';
     document.getElementById("btn-logout").addEventListener("click", logout);
+    document.getElementById("patron-content").addEventListener("click", function(e){
+      if(e.target && e.target.id==="btn-upload-pdf"){
+        var input=document.getElementById("pdf-file-input");
+        if(!input||!input.files||!input.files[0]){alert("Choisis un fichier PDF.");return;}
+        var fd=new FormData();fd.append("pdf",input.files[0]);
+        e.target.disabled=true;e.target.textContent="Upload...";
+        fetch("/api/pdfs",{method:"POST",body:fd,credentials:"same-origin"})
+          .then(function(r){return r.json();})
+          .then(function(d){if(d.error)throw new Error(d.error);state.pdfs.push(d.pdf);renderPatronContent();})
+          .catch(function(e){alert("Erreur upload: "+e.message);});
+      }
+    });
     renderPatronContent();
   }
 
@@ -301,15 +313,7 @@
   function bindPatronEvents() {
     var el = document.getElementById("patron-content");
 
-    document.getElementById("btn-upload-pdf").addEventListener("click", function(){
-      var input = document.getElementById("pdf-file-input");
-      if (!input.files||!input.files[0]) { alert("Choisis un fichier PDF."); return; }
-      var fd = new FormData(); fd.append("pdf", input.files[0]);
-      fetch("/api/pdfs",{method:"POST",body:fd,credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){
-        if (d.error) throw new Error(d.error);
-        state.pdfs.push(d.pdf); renderPatronContent();
-      }).catch(function(e){ alert("Erreur upload: "+e.message); });
-    });
+    
 
     el.querySelectorAll(".btn-select-pages").forEach(function(btn){
       btn.addEventListener("click", function(){
