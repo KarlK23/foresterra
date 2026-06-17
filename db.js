@@ -1,26 +1,33 @@
-const fs = require("fs");
-const path = require("path");
-const DB_PATH = path.join(__dirname, "data", "db.json");
-function defaultDb() {
-  return { users: [], parcelles: [], affectations: [], retours: [], pdfs: [] };
+const { MongoClient } = require("mongodb");
+const MONGODB_URI = process.env.MONGODB_URI;
+let _db = null;
+
+async function getDb() {
+  if (_db) return _db;
+  const client = new MongoClient(MONGODB_URI);
+  await client.connect();
+  _db = client.db("foresterra");
+  return _db;
 }
-function loadDb() {
-  if (!fs.existsSync(DB_PATH)) { const db = defaultDb(); saveDb(db); return db; }
-  try {
-    const raw = fs.readFileSync(DB_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
-    const def = defaultDb();
-    return {
-      users: parsed.users || def.users,
-      parcelles: parsed.parcelles || def.parcelles,
-      affectations: parsed.affectations || def.affectations,
-      retours: parsed.retours || def.retours,
-      pdfs: parsed.pdfs || def.pdfs
-    };
-  } catch (e) { const db = defaultDb(); saveDb(db); return db; }
+
+async function loadDb() {
+  const db = await getDb();
+  const users = await db.collection("users").find({}).toArray();
+  const parcelles = await db.collection("parcelles").find({}).toArray();
+  const affectations = await db.collection("affectations").find({}).toArray();
+  const retours = await db.collection("retours").find({}).toArray();
+  const pdfs = await db.collection("pdfs").find({}).toArray();
+  return { users, parcelles, affectations, retours, pdfs };
 }
-function saveDb(db) {
-  if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf-8");
+
+async function saveDb(db) {
+  const mdb = await getDb();
+  for (const col of ["users","parcelles","affectations","retours","pdfs"]) {
+    await mdb.collection(col).deleteMany({});
+    if (db[col] && db[col].length > 0) {
+      await mdb.collection(col).insertMany(db[col]);
+    }
+  }
 }
-module.exports = { loadDb, saveDb, DB_PATH };
+
+module.exports = { loadDb, saveDb };
