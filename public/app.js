@@ -533,8 +533,32 @@
     document.getElementById("btn-modal-confirm").addEventListener("click", confirmPageSelection);
     overlay.addEventListener("click", closePdfModal);
     modal.addEventListener("click", function(e){e.stopPropagation();});
+    var proxyUrl='/api/proxy-pdf?url='+encodeURIComponent(filename);
+    if(typeof pdfjsLib!=='undefined'){
+      pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      pdfjsLib.getDocument(proxyUrl).promise.then(function(doc){
+        var viewer=document.getElementById('patron-pdf-viewer');
+        if(!viewer)return;
+        viewer.innerHTML='';
+        for(var i=1;i<=doc.numPages;i++){(function(n){
+          var c=document.createElement('canvas');
+          c.style.cssText='display:block;width:100%;margin-bottom:8px;background:#fff;';
+          viewer.appendChild(c);
+          doc.getPage(n).then(function(p){
+            var vp=p.getViewport({scale:1});
+            var sc=(viewer.offsetWidth-20)/vp.width;
+            var sv=p.getViewport({scale:sc});
+            c.width=sv.width;c.height=sv.height;
+            p.render({canvasContext:c.getContext('2d'),viewport:sv});
+          });
+        })(i);}
+      }).catch(function(){
+        var v=document.getElementById('patron-pdf-viewer');
+        if(v)v.innerHTML='<p style="color:#f88;text-align:center;padding:40px;">Impossible de charger le PDF.</p>';
+      });
+    }
     bindPdfAcheteurBtns();
-    analyzePdfDates('/api/proxy-pdf?url='+encodeURIComponent(filename),
+    analyzePdfDates(proxyUrl,
       function(i,total){
         var el=document.getElementById("modal-page-list");
         if(el) el.innerHTML='<p style="color:#6f6e69;font-size:13px;text-align:center;margin-top:20px;">⏳ Lecture page '+i+'/'+total+'…</p>';
