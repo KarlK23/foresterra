@@ -301,7 +301,7 @@
   function bindPatronEvents() {
     var el = document.getElementById("patron-content");
 
-    document.getElementById("btn-upload-pdf").addEventListener("click", function(){
+    var btnUp=document.getElementById("btn-upload-pdf");if(btnUp._bound)return;btnUp._bound=true;btnUp.addEventListener("click", function(){
       var input = document.getElementById("pdf-file-input");
       if (!input.files||!input.files[0]) { alert("Choisis un fichier PDF."); return; }
       var fd = new FormData(); fd.append("pdf", input.files[0]);
