@@ -137,7 +137,7 @@ app.post("/api/pdfs", requirePatron, function (req, res) {
     const id = genId("pdf");
     const {Readable} = require("stream");
     const stream = cloudinary.uploader.upload_stream(
-      { resource_type: "raw", public_id: id, folder: "foresterra", format: "pdf", access_mode: "public", type: "upload" },
+      { resource_type: "image", public_id: id, folder: "foresterra", format: "pdf" },
       function(error, result) {
         if (error) return res.status(500).json({ error: "Cloudinary: " + error.message });
         const db = loadDb();
