@@ -1366,7 +1366,7 @@ function openFicheModalEFC(parcelle, retour, modeRetour) {
         '<td></td><td class="efc-td-r"><b>' + fmt(r.transTotal,0) + ' €</b></td></tr>' +
         '<tr><td colspan="4">Coût exploitation</td><td class="efc-td-r">' + fmt(r.coutExpl,0) + ' €</td><td colspan="2"></td></tr>' +
       '</tfoot></table>' +
-      '<h4>Tableau des prix d'achat selon marge</h4>' +
+      '<h4>Tableau des prix d\'achat selon marge</h4>' +
       '<table class="efc-table efc-table-marges"><thead><tr><th>Marge EFC</th><th>Prix achat</th><th>€/m³</th></tr></thead>' +
       '<tbody>' + margesHTML + '</tbody></table>' +
     '</div>';
