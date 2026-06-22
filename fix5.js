@@ -1,16 +1,6 @@
 var fs=require('fs');
 var s=fs.readFileSync('public/app.js','utf8');
-s=s.replace(
-  "var url = pdf.filename;",
-  "var url = '/api/proxy-pdf?url='+encodeURIComponent(pdf.filename);"
-);
-s=s.replace(
-  "var url=filename;",
-  "var url='/api/proxy-pdf?url='+encodeURIComponent(filename);"
-);
-s=s.replace(
-  "analyzePdfDates(filename,",
-  "analyzePdfDates('/api/proxy-pdf?url='+encodeURIComponent(filename),"
-);
+s=s.split('function openFicheModalEFC(').join('window.openFicheModalEFC=function(');
+s=s.split('function closeFicheModal(').join('window.closeFicheModal=function(');
 fs.writeFileSync('public/app.js',s);
-console.log('ok');
+console.log('ok - taille:'+fs.readFileSync('public/app.js').length);
