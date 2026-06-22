@@ -412,7 +412,7 @@
         var pid=btn.getAttribute("data-pid"), aid=btn.getAttribute("data-aid");
         var retour=state.retours.find(function(r){return r.parcelleId===pid&&r.acheteurId===aid;})||{acheteurId:aid,parcelleId:pid};
         var parcelle=state.parcelles.find(function(p){return p.id===pid;});
-        openFicheModal(parcelle, retour, false); // false = éditable par le patron
+        openFicheModalEFC(parcelle, retour, false); // false = éditable par le patron
       });
     });
 
@@ -447,7 +447,7 @@
         api("POST","/api/retours-patron",{
           parcelleId:pid, acheteurId:aid, statut, description:desc,
           estimation:est, achete:statut==="achete", prix:statut==="achete"?prix:"",
-          fiche:retourExist.fiche||null
+          fiche:null, ficheEFC:retourExist.ficheEFC||null
         }).then(function(d){
           var idx=state.retours.findIndex(function(r){return r.parcelleId===pid&&r.acheteurId===aid;});
           if (idx!==-1) state.retours[idx]=d.retour; else state.retours.push(d.retour);
@@ -764,7 +764,7 @@
 
         // ─ Fiche d\'estimation
         if (ficheRequired(statut)) {
-          var hasFiche=!!(retour&&retour.fiche);
+          var hasFiche=!!(retour&&(retour.fiche||retour.ficheEFC));
           html+='<div style="margin:8px 0;"><button class="btn-open-fiche '+(hasFiche?"primary":"")+'" data-pid="'+p.id+'" style="font-size:13px;">'+
             (hasFiche?"📋 Modifier la fiche d\'estimation":"📋 Remplir la fiche d\'estimation")+'</button>'+
             (hasFiche?'<span style="font-size:12px;color:#0f6e56;margin-left:8px;">✓ Fiche remplie</span>':'')+'</div>';
@@ -815,7 +815,7 @@
             div.querySelector(".btn-open-fiche").addEventListener("click", function(){
               var parcelle=state.parcelles.find(function(p){return p.id===pid;});
               var retour=state.retours.find(function(r){return r.parcelleId===pid;})||{};
-              openFicheModal(parcelle, retour, false);
+              openFicheModalEFC(parcelle, retour, false);
             });
           }
         }
@@ -827,7 +827,7 @@
         var pid=btn.getAttribute("data-pid");
         var parcelle=state.parcelles.find(function(p){return p.id===pid;});
         var retour=state.retours.find(function(r){return r.parcelleId===pid;})||{};
-        openFicheModal(parcelle, retour, false);
+        openFicheModalEFC(parcelle, retour, false);
       });
     });
 
@@ -844,7 +844,7 @@
         api("POST","/api/retours",{
           parcelleId:pid, statut, description:desc, estimation:est,
           achete:statut==="achete", prix:statut==="achete"?prix:"",
-          fiche:retourExist.fiche||null
+          fiche:null, ficheEFC:retourExist.ficheEFC||null
         }).then(function(d){
           var idx=state.retours.findIndex(function(rx){return rx.parcelleId===pid;});
           if (idx!==-1) state.retours[idx]=d.retour; else state.retours.push(d.retour);
@@ -1086,239 +1086,7 @@
     return res;
   }
 
-  var _ficheParcelleId=null, _ficheReadonly=false, _ficheAcheteurId=null;
-
-  function openFicheModal(parcelle, retour, readonly) {
-    var fiche = (retour&&retour.fiche) ? retour.fiche : defaultFiche();
-    _ficheParcelleId = parcelle ? parcelle.id : null;
-    _ficheReadonly   = !!readonly;
-    _ficheAcheteurId = retour ? retour.acheteurId : null;
-
-    var overlay=document.getElementById("fiche-modal-overlay");
-    var modal  =document.getElementById("fiche-modal");
-    overlay.style.cssText="display:block;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;";
-    modal.style.cssText="display:flex;flex-direction:column;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(98vw,820px);height:92vh;background:#fff;border-radius:14px;z-index:201;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,0.35);";
-
-    var ro=readonly?" readonly disabled":"";
-    var titre=parcelle?"Fiche d\'estimation — "+parcelle.label:"Fiche d\'estimation";
-
-    var html='<div style="padding:14px 20px;border-bottom:1px solid #e0ddd5;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">'+
-      '<div><p style="margin:0;font-weight:700;font-size:15px;">'+esc(titre)+'</p>'+
-      (readonly?'<p style="margin:2px 0 0;font-size:12px;color:#6f6e69;">Vue lecture seule</p>':'<p style="margin:2px 0 0;font-size:12px;color:#6f6e69;">Remplissez les données — les totaux se calculent automatiquement</p>')+'</div>'+
-      '<button id="btn-close-fiche" style="font-size:20px;border:none;background:none;cursor:pointer;color:#6f6e69;padding:4px 8px;">✕</button></div>';
-
-    html+='<div id="fiche-body" style="flex:1;overflow-y:auto;padding:16px 20px;">';
-
-    // ─ Section 1: Infos générales
-    html+='<div class="fiche-section"><p class="fiche-title">Informations générales</p>';
-    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;">';
-    html+=fField("Article n°","f-article",fiche.article,ro);
-    html+=fField("Objectif prix VABRES stères rendu (€/st)","f-objectifPrix",fiche.objectifPrix,ro);
-    html+=fField("Ratio ST/T","f-ratioST_T",fiche.ratioST_T,ro);
-    html+=fField("Ratio ST/M3","f-ratioST_M3",fiche.ratioST_M3,ro);
-    html+=fField("Prix exploit au ST","f-prixExploitST",fiche.prixExploitST,ro);
-    html+=fField("Prix exploit à la tonne","f-prixExploitTonne",fiche.prixExploitTonne,ro);
-    html+=fField("Prix exploit au M3","f-prixExploitM3",fiche.prixExploitM3,ro);
-    html+=fField("Volume tige cahier","f-volumeCahier",fiche.volumeCahier,ro);
-    html+=fField("Volume tige EFC","f-volumeEFC",fiche.volumeEFC,ro);
-    html+=fField("Montant exploitation (€)","f-montantExpl",fiche.montantExpl,ro);
-    html+=fField("Montant frais divers (€)","f-montantFrais",fiche.montantFrais||"0",ro);
-    html+='</div></div>';
-
-    // ─ Section 2: PRODUIT 1 BC
-    html+='<div class="fiche-section"><p class="fiche-title">Produit 1 — Bois de Chauffage (BC)</p>';
-    html+='<div style="overflow-x:auto;"><table class="fiche-table"><thead><tr>'+
-      '<th>Essence</th><th>%</th><th>Vol. M3</th><th>Prix vente (€)</th>'+
-      '<th style="background:#f0f7f4;">CA (€)</th><th>Coût trans. (€)</th>'+
-      '<th style="background:#f0f7f4;">CA Trans. (€)</th><th style="background:#f0f7f4;">Coût marge 15%</th>'+
-      '</tr></thead><tbody>';
-    fiche.bc.forEach(function(row,i){
-      html+='<tr>'+
-        '<td style="font-weight:600;color:#2c2c2a;white-space:nowrap;">'+row.essence+'</td>'+
-        '<td><input class="fiche-input bc-pct" data-i="'+i+'" type="text" value="'+esc(row.pct)+'"'+ro+'/></td>'+
-        '<td><input class="fiche-input bc-vol" data-i="'+i+'" type="text" value="'+esc(row.volume)+'"'+ro+'/></td>'+
-        '<td><input class="fiche-input bc-prix" data-i="'+i+'" type="text" value="'+esc(row.prixVente)+'"'+ro+'/></td>'+
-        '<td class="fiche-auto" id="bc-ca-'+i+'">—</td>'+
-        '<td><input class="fiche-input bc-ctrans" data-i="'+i+'" type="text" value="'+esc(row.coutTrans)+'"'+ro+'/></td>'+
-        '<td class="fiche-auto" id="bc-catrans-'+i+'">—</td>'+
-        '<td class="fiche-auto" id="bc-coutmarge-'+i+'">—</td></tr>';
-    });
-    html+='<tr style="background:#e8f5ef;font-weight:700;"><td>TOTAL</td><td></td>'+
-      '<td class="fiche-auto" id="bc-tot-vol">—</td><td></td>'+
-      '<td class="fiche-auto" id="bc-tot-ca">—</td><td></td>'+
-      '<td class="fiche-auto" id="bc-tot-catrans">—</td>'+
-      '<td class="fiche-auto" id="bc-tot-coutmarge">—</td></tr>';
-    html+='</tbody></table></div></div>';
-
-    // ─ Sections produits 2-5
-    var autres=[
-      {key:"bpv",   nom:"Produit 2 — Bois Papeterie Vert (BPV)", unite:"ST"},
-      {key:"bpg",   nom:"Produit 3 — Bois Papeterie Gros (BPG)", unite:"ST"},
-      {key:"tritus",nom:"Produit 4 — Tritus",                    unite:"T"},
-      {key:"poteaux",nom:"Produit 5 — Poteaux",                  unite:"M3 F"}
-    ];
-    autres.forEach(function(p){
-      var row=fiche[p.key]||{};
-      html+='<div class="fiche-section"><p class="fiche-title">'+p.nom+'</p>';
-      html+='<div style="overflow-x:auto;"><table class="fiche-table"><thead><tr>'+
-        '<th>Essence</th><th>%</th><th>Vol. '+p.unite+' </th><th>Prix vente (€)</th>'+
-        '<th style="background:#f0f7f4;">CA (€)</th><th>Coût trans. (€)</th>'+
-        '<th style="background:#f0f7f4;">CA Trans. (€)</th><th style="background:#f0f7f4;">Coût marge 15%</th>'+
-        '</tr></thead><tbody><tr>'+
-        '<td style="font-weight:600;">RX</td>'+
-        '<td><input class="fiche-input" id="f-'+p.key+'-pct" type="text" value="'+esc(row.pct||"")+'"'+ro+'/></td>'+
-        '<td><input class="fiche-input" id="f-'+p.key+'-vol" type="text" value="'+esc(row.volume||"")+'"'+ro+'/></td>'+
-        '<td><input class="fiche-input" id="f-'+p.key+'-prix" type="text" value="'+esc(row.prixVente||"")+'"'+ro+'/></td>'+
-        '<td class="fiche-auto" id="'+p.key+'-ca">—</td>'+
-        '<td><input class="fiche-input" id="f-'+p.key+'-ctrans" type="text" value="'+esc(row.coutTrans||"")+'"'+ro+'/></td>'+
-        '<td class="fiche-auto" id="'+p.key+'-catrans">—</td>'+
-        '<td class="fiche-auto" id="'+p.key+'-coutmarge">—</td></tr>'+
-        '</tbody></table></div></div>';
-    });
-
-    // ─ Résumé
-    html+='<div class="fiche-section"><p class="fiche-title">Résumé calculé</p>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;">'+
-      fDisplay("CA du lot","f-caLot")+fDisplay("Cout exploitation","f-coutExpl")+
-      fDisplay("Coût transport total","f-coutTransTotal")+fDisplay("Marge EFC (15%)","f-margeEFC")+
-      fDisplay("Prix de base (marge 0%)","f-prixBase")+'</div></div>';
-
-    // ─ Table des prix
-    html+='<div class="fiche-section"><p class="fiche-title">Table des prix par marge</p>'+
-      '<div style="overflow-x:auto;"><table class="fiche-table">'+
-      '<thead><tr><th>Prix achat (€)</th><th>€ / stère EFC</th><th>Marge</th><th>Valeur marge (€)</th></tr></thead>'+
-      '<tbody id="fiche-price-tbody"><tr><td colspan="4" style="text-align:center;color:#a3a098;">Renseignez les volumes et prix</td></tr></tbody>'+
-      '</table></div></div>';
-
-    // ─ Cout divers + commentaires
-    html+='<div class="fiche-section"><p class="fiche-title">Autres informations</p>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;">'+
-      fField("Coût divers (€)","f-coutDivers",fiche.coutDivers||"0",ro)+'</div>'+
-      '<label class="field-label" style="margin-top:8px;">Commentaires</label>'+
-      '<textarea id="f-commentaires" rows="3" style="width:100%;margin-top:4px;"'+(readonly?" readonly":"")+'>'+esc(fiche.commentaires||"")+'</textarea>'+
-      '</div>';
-
-    html+='</div>'; // end fiche-body
-
-    // Footer
-    html+='<div style="padding:14px 20px;border-top:1px solid #e0ddd5;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;">';
-    html+='<button id="btn-fiche-cancel">Fermer</button>';
-    if (!readonly) html+='<button id="btn-fiche-save" class="primary">Enregistrer la fiche</button>';
-    html+='</div>';
-
-    modal.innerHTML=html;
-
-    // Events
-    document.getElementById("btn-close-fiche").addEventListener("click", closeFicheModal);
-    document.getElementById("btn-fiche-cancel").addEventListener("click", closeFicheModal);
-    overlay.addEventListener("click", closeFicheModal);
-    modal.addEventListener("click", function(e){e.stopPropagation();});
-
-    if (!readonly) {
-      document.getElementById("btn-fiche-save").addEventListener("click", function(){ saveFiche(); });
-      document.getElementById("fiche-body").addEventListener("input", function(){ recalcFiche(); });
-    }
-
-    recalcFiche(); // calcul initial
-  }
-
-  function fField(label, id, val, ro) {
-    return '<div><label class="field-label">'+label+'</label>'+
-      '<input id="'+id+'" type="text" value="'+esc(val)+'"'+ro+' style="width:100%;"/></div>';
-  }
-  function fDisplay(label, id) {
-    return '<div style="background:#f7f6f3;border-radius:8px;padding:8px 12px;">'+
-      '<p style="margin:0 0 2px;font-size:11px;color:#6f6e69;">'+label+'</p>'+
-      '<strong id="'+id+'" style="font-size:15px;color:#0f6e56;">—</strong></div>';
-  }
-
-  function readFicheFromModal() {
-    function val(id){ var el=document.getElementById(id); return el?el.value:""; }
-    function bcRow(i){ return {
-      essence:["DOUGLAS","EPICEAS","SAPINS","PINS","MELEZES"][i],
-      pct: (document.querySelectorAll(".bc-pct")[i]||{}).value||"",
-      volume: (document.querySelectorAll(".bc-vol")[i]||{}).value||"",
-      prixVente: (document.querySelectorAll(".bc-prix")[i]||{}).value||"",
-      coutTrans: (document.querySelectorAll(".bc-ctrans")[i]||{}).value||""
-    };}
-    function other(k){ return {
-      pct:val("f-"+k+"-pct"), volume:val("f-"+k+"-vol"), prixVente:val("f-"+k+"-prix"), coutTrans:val("f-"+k+"-ctrans")
-    };}
-    return {
-      article:val("f-article"), ratioST_T:val("f-ratioST_T"), ratioST_M3:val("f-ratioST_M3"),
-      prixExploitST:val("f-prixExploitST"), prixExploitTonne:val("f-prixExploitTonne"), prixExploitM3:val("f-prixExploitM3"),
-      volumeCahier:val("f-volumeCahier"), volumeEFC:val("f-volumeEFC"), objectifPrix:val("f-objectifPrix"),
-      montantExpl:val("f-montantExpl"), montantFrais:val("f-montantFrais"),
-      bc:[0,1,2,3,4].map(bcRow),
-      bpv:other("bpv"), bpg:other("bpg"), tritus:other("tritus"), poteaux:other("poteaux"),
-      coutDivers:val("f-coutDivers"),
-      commentaires:(document.getElementById("f-commentaires")||{}).value||""
-    };
-  }
-
-  function recalcFiche() {
-    var f=readFicheFromModal();
-    var c=calcFiche(f);
-    function setT(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
-    c.bc.forEach(function(row,i){
-      setT("bc-ca-"+i, row.ca?fmtN(row.ca):"—");
-      setT("bc-catrans-"+i, row.caTrans?fmtN(row.caTrans):"—");
-      setT("bc-coutmarge-"+i, row.coutMarge?fmtN(row.coutMarge):"—");
-    });
-    setT("bc-tot-vol", c.bcVol?c.bcVol.toLocaleString("fr-FR"):"—");
-    setT("bc-tot-ca", c.bcCA?fmtN(c.bcCA):"—");
-    setT("bc-tot-catrans", c.bcCATrans?fmtN(c.bcCATrans):"—");
-    setT("bc-tot-coutmarge", c.bcCoutMarge?fmtN(c.bcCoutMarge):"—");
-    ["bpv","bpg","tritus","poteaux"].forEach(function(k){
-      var o=c.others[k];
-      setT(k+"-ca", o.ca?fmtN(o.ca):"—");
-      setT(k+"-catrans", o.caTrans?fmtN(o.caTrans):"—");
-      setT(k+"-coutmarge", o.coutMarge?fmtN(o.coutMarge):"—");
-    });
-    setT("f-caLot", c.caLot?fmtN(c.caLot):"—");
-    setT("f-coutExpl", c.coutExpl?fmtN(c.coutExpl):"—");
-    setT("f-coutTransTotal", c.coutTransTotal?fmtN(c.coutTransTotal):"—");
-    setT("f-margeEFC", c.margeEFC?fmtN(c.margeEFC):"—");
-    setT("f-prixBase", c.prixBase?fmtN(c.prixBase):"—");
-
-    // Table des prix
-    var tbody=document.getElementById("fiche-price-tbody");
-    if (tbody&&c.caLot>0) {
-      // Index 0% pour marquer la ligne de base
-      var rows="";
-      c.priceTable.forEach(function(row){
-        var isZero=row.label==="0%";
-        var isNeg=parseFloat(row.label)<0;
-        var bg=isZero?"#fff8e1":(isNeg?"#fdf0f0":"#f0fff4");
-        var fw=isZero?"700":"400";
-        rows+='<tr style="background:'+bg+';font-weight:'+fw+';">'+
-          '<td style="font-size:13px;">'+row.prix.toLocaleString("fr-FR")+' €</td>'+
-          '<td style="font-size:13px;">'+row.perStere+' €/st</td>'+
-          '<td style="font-size:13px;font-weight:600;">'+(isZero?"➡ "+row.label:row.label)+'</td>'+
-          '<td style="font-size:13px;color:'+(row.margeVal>=0?"#3b6d11":"#a32d2d")+';">'+row.margeVal.toLocaleString("fr-FR")+' €</td></tr>';
-      });
-      tbody.innerHTML=rows;
-    } else if (tbody) {
-      tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:#a3a098;">Renseignez les volumes et prix pour voir la table</td></tr>';
-    }
-  }
-
-  function saveFiche() {
-    var fiche=readFicheFromModal();
-    var pid=_ficheParcelleId;
-    if (!pid) return;
-    var retour=state.retours.find(function(r){return r.parcelleId===pid;})||{};
-    api("POST","/api/retours",{
-      parcelleId:pid, statut:retour.statut||"estime",
-      description:retour.description||"", estimation:retour.estimation||"",
-      achete:retour.achete||false, prix:retour.prix||"", fiche:fiche
-    }).then(function(d){
-      var idx=state.retours.findIndex(function(r){return r.parcelleId===pid;});
-      if (idx!==-1) state.retours[idx]=d.retour; else state.retours.push(d.retour);
-      closeFicheModal();
-      if (state.user.role==="patron") renderPatronContent();
-      else renderAcheteurContent();
-    }).catch(function(e){ alert("Erreur sauvegarde: "+e.message); });
+  var _fichePfunction(e){ alert("Erreur sauvegarde: "+e.message); });
   }
 
   function closeFicheModal() {
@@ -1327,6 +1095,474 @@
     if (overlay) overlay.style.display="none";
     if (modal)   modal.style.display="none";
   }
+
+
+
+// ============================================================
+// FICHE EFC - ESTIMATION FORESTIERE COMPLETE
+// Basée sur TABLEUR_ESTIM_EFC_type_BD
+// ============================================================
+
+function openFicheModalEFC(parcelle, retour, modeRetour) {
+  var overlay = document.getElementById('fiche-modal-overlay');
+  var modal = document.getElementById('fiche-modal');
+  if (!overlay || !modal) return;
+
+  var ficheData = (retour && retour.ficheEFC) ? retour.ficheEFC : {};
+
+  // Essences disponibles
+  var essences = [
+    { key: 'douglas', label: 'Douglas', tarif_defaut: 17, longueur_defaut: 13 },
+    { key: 'epiceas', label: 'Epicéas', tarif_defaut: 14, longueur_defaut: 13 },
+    { key: 'sapins', label: 'Sapins', tarif_defaut: 14, longueur_defaut: 13 },
+    { key: 'melezes', label: 'Mélèzes', tarif_defaut: 16, longueur_defaut: 13 },
+    { key: 'palette', label: 'Palette/Secs', tarif_defaut: 14, longueur_defaut: 13 }
+  ];
+
+  // Diamètres de 15 à 105 par pas de 5
+  var diametres = [];
+  for (var d = 15; d <= 105; d += 5) diametres.push(d);
+
+  // Paramètres Rabais
+  var ratioST_T   = ficheData.ratioST_T   || 0.5;
+  var ratioST_M3  = ficheData.ratioST_M3  || 0.65;
+  var prixVabres  = ficheData.prixVabres  || 55;
+  var prixExplST  = ficheData.prixExplST  || 17;
+  var fraisDivers = ficheData.fraisDivers || 0;
+
+  // Produits (5 lignes Rabais)
+  var produits = ficheData.produits || [
+    { type: 'BC',     essence: 'Douglas', pct: 0, prixVente: 0, coutTrans: 0, marge: 15 },
+    { type: 'BPV',    essence: 'RX',      pct: 0, prixVente: prixVabres, coutTrans: 0, marge: 15 },
+    { type: 'BPG',    essence: 'RX',      pct: 0, prixVente: 0, coutTrans: 0, marge: 15 },
+    { type: 'TRITUS', essence: 'RX',      pct: 0, prixVente: 0, coutTrans: 0, marge: 15 },
+    { type: 'POTEAUX',essence: 'RX',      pct: 0, prixVente: 0, coutTrans: 0, marge: 15 }
+  ];
+
+  // Volume total G3 (à saisir)
+  var volTotalG3 = ficheData.volTotalG3 || 0;
+
+  // Données tiges par essence
+  var tigesData = ficheData.tigesData || {};
+  essences.forEach(function(e) {
+    if (!tigesData[e.key]) {
+      tigesData[e.key] = { enabled: false, longueur1: 13, longueur2: 0, longueur3: 0, tiges: {} };
+    }
+  });
+
+  // ---- Formule dendrométrique ----
+  function calcVolume(diam, tarif, longueur) {
+    if (!diam || !longueur || longueur <= 0) return 0;
+    var correction = -1.01516781053481 + 1.02972 * Math.log(diam) - 0.1053013 * tarif;
+    var r = diam - correction * (longueur / 2 - 1);
+    return r * r * Math.PI / 4 * longueur / 10000;
+  }
+
+  function calcVolume2(diam, tarif, l1, l2) {
+    if (!diam || !l2 || l2 <= 0) return 0;
+    var corr = -1.01516781053481 + 1.02972 * Math.log(diam) - 0.1053013 * tarif;
+    var r2 = diam - corr * ((l1 + l2) / 2 - 1);
+    var r1 = diam - corr * (l1 / 2 - 1);
+    return (r2 * r2 * Math.PI / 4 * (l1 + l2) / 10000) - (r1 * r1 * Math.PI / 4 * l1 / 10000);
+  }
+
+  function calcVolume3(diam, tarif, l1, l2, l3) {
+    if (!diam || !l3 || l3 <= 0) return 0;
+    var corr = -1.01516781053481 + 1.02972 * Math.log(diam) - 0.1053013 * tarif;
+    var r3 = diam - corr * ((l1 + l2 + l3) / 2 - 1);
+    var r2 = diam - corr * ((l1 + l2) / 2 - 1);
+    return (r3 * r3 * Math.PI / 4 * (l1 + l2 + l3) / 10000) - (r2 * r2 * Math.PI / 4 * (l1 + l2) / 10000);
+  }
+
+  // ---- Calcul volumes par essence ----
+  function calcEssence(eKey) {
+    var td = tigesData[eKey];
+    if (!td || !td.enabled) return { nbTiges: 0, volTotal: 0, volL1: 0, volL2: 0, volL3: 0 };
+    var l1 = parseFloat(td.longueur1) || 0;
+    var l2 = parseFloat(td.longueur2) || 0;
+    var l3 = parseFloat(td.longueur3) || 0;
+    var ess = essences.find(function(e){ return e.key === eKey; });
+    var tarif = parseFloat(td.tarif) || ess.tarif_defaut;
+
+    var nbTiges = 0, volTotal = 0, vL1 = 0, vL2 = 0, vL3 = 0;
+    diametres.forEach(function(d) {
+      var n = parseInt(td.tiges[d]) || 0;
+      if (n === 0) return;
+      nbTiges += n;
+      var e1 = calcVolume(d, tarif, l1);
+      var e2 = calcVolume2(d, tarif, l1, l2);
+      var e3 = calcVolume3(d, tarif, l1, l2, l3);
+      vL1 += e1 * n;
+      vL2 += e2 * n;
+      vL3 += e3 * n;
+      volTotal += (e1 + e2 + e3) * n;
+    });
+    return { nbTiges: nbTiges, volTotal: volTotal, volL1: vL1, volL2: vL2, volL3: vL3, tarif: tarif, l1: l1, l2: l2, l3: l3 };
+  }
+
+  // ---- Calcul Rabais ----
+  function calcRabais() {
+    var G3 = parseFloat(volTotalG3) || 0;
+    var prixExplM3 = prixExplST / ratioST_M3;
+
+    // Produit 1: BC (bois de charpente) en m3
+    var volBC = G3 * (parseFloat(produits[0].pct) / 100);
+    var caBC = (parseFloat(produits[0].prixVente) || 0) * volBC;
+    var transBC = (parseFloat(produits[0].coutTrans) || 0) * volBC;
+    var margeBC = caBC * (produits[0].marge / 100);
+
+    // Produit 2: BPV (bois petite valeur) en stères
+    var volBPV = (G3 * (parseFloat(produits[1].pct) / 100)) / ratioST_M3;
+    var caBPV = prixVabres * volBPV;
+    var transBPV = (parseFloat(produits[1].coutTrans) || 0) * volBPV;
+    var margeBPV = caBPV * (produits[1].marge / 100);
+
+    // Produit 3: BPG en stères
+    var volBPG = (G3 * (parseFloat(produits[2].pct) / 100)) / ratioST_M3;
+    var caBPG = (parseFloat(produits[2].prixVente) || 0) * volBPG;
+    var transBPG = (parseFloat(produits[2].coutTrans) || 0) * volBPG;
+    var margeBPG = caBPG * (produits[2].marge / 100);
+
+    // Produit 4: TRITUS en tonnes
+    var volTRITUS = ((G3 * (parseFloat(produits[3].pct) / 100)) / ratioST_M3) * ratioST_T;
+    var caTRITUS = (parseFloat(produits[3].prixVente) || 0) * volTRITUS;
+    var transTRITUS = (parseFloat(produits[3].coutTrans) || 0) * volTRITUS;
+    var margeTRITUS = caTRITUS * (produits[3].marge / 100);
+
+    // Produit 5: POTEAUX en m3 façonnés
+    var volPOTEAUX = (G3 * (parseFloat(produits[4].pct) / 100)) * 0.7;
+    var caPOTEAUX = (parseFloat(produits[4].prixVente) || 0) * volPOTEAUX;
+    var transPOTEAUX = (parseFloat(produits[4].coutTrans) || 0) * volPOTEAUX;
+    var margePOTEAUX = caPOTEAUX * (produits[4].marge / 100);
+
+    var caTotal = caBC + caBPV + caBPG + caTRITUS + caPOTEAUX;
+    var transTotal = transBC + transBPV + transBPG + transTRITUS + transPOTEAUX;
+    var margeTotal = margeBC + margeBPV + margeBPG + margeTRITUS + margePOTEAUX;
+    var coutExpl = (G3 / ratioST_M3) * prixExplST;
+
+    // Tableau des marges (-22% à +17%)
+    var marges = [-22,-20,-17,-15,-12,-10,-7,-5,-2,0,2,5,7,10,12,15,17];
+    var tableauMarges = marges.map(function(m) {
+      var achat;
+      if (m <= 0) {
+        achat = ((caTotal - (coutExpl + transTotal + fraisDivers)) + (caTotal * (1 + Math.abs(m)/100))) - caTotal;
+      } else {
+        achat = caTotal - ((coutExpl + transTotal + fraisDivers) + (caTotal * m / 100));
+      }
+      return { marge: m, achat: achat, achatM3: G3 > 0 ? achat / G3 : 0 };
+    });
+
+    return {
+      caTotal: caTotal, transTotal: transTotal, margeTotal: margeTotal,
+      coutExpl: coutExpl, fraisDivers: fraisDivers,
+      tableauMarges: tableauMarges, G3: G3,
+      vols: { BC: volBC, BPV: volBPV, BPG: volBPG, TRITUS: volTRITUS, POTEAUX: volPOTEAUX },
+      cas:  { BC: caBC,  BPV: caBPV,  BPG: caBPG,  TRITUS: caTRITUS,  POTEAUX: caPOTEAUX },
+      trans: { BC: transBC, BPV: transBPV, BPG: transBPG, TRITUS: transTRITUS, POTEAUX: transPOTEAUX }
+    };
+  }
+
+  // ---- Rendu HTML ----
+  function fmt(n, dec) {
+    if (isNaN(n) || !isFinite(n)) return '-';
+    return parseFloat(n).toFixed(dec !== undefined ? dec : 2);
+  }
+
+  function renderTigesTable(eKey) {
+    var td = tigesData[eKey];
+    var ess = essences.find(function(e){ return e.key === eKey; });
+    var l1 = parseFloat(td.longueur1) || 0;
+    var l2 = parseFloat(td.longueur2) || 0;
+    var l3 = parseFloat(td.longueur3) || 0;
+    var tarif = parseFloat(td.tarif) || ess.tarif_defaut;
+
+    var rows = diametres.map(function(d) {
+      var n = parseInt(td.tiges[d]) || 0;
+      var e1 = calcVolume(d, tarif, l1);
+      var e2 = calcVolume2(d, tarif, l1, l2);
+      var e3 = calcVolume3(d, tarif, l1, l2, l3);
+      var vtot = (e1 + e2 + e3) * n;
+      return '<tr>' +
+        '<td class="efc-td-c">' + d + '</td>' +
+        '<td><input type="number" min="0" class="efc-input-n" data-essence="' + eKey + '" data-diam="' + d + '" value="' + (n||'') + '"></td>' +
+        '<td class="efc-td-c">' + tarif + '</td>' +
+        '<td class="efc-td-c">' + (l1||'-') + '</td>' +
+        '<td class="efc-td-r">' + (n>0&&l1>0 ? fmt(e1,4) : '-') + '</td>' +
+        '<td class="efc-td-c">' + (l2||'-') + '</td>' +
+        '<td class="efc-td-r">' + (n>0&&l2>0 ? fmt(e2,4) : '-') + '</td>' +
+        '<td class="efc-td-c">' + (l3||'-') + '</td>' +
+        '<td class="efc-td-r">' + (n>0&&l3>0 ? fmt(e3,4) : '-') + '</td>' +
+        '<td class="efc-td-r"><b>' + (n>0 ? fmt(vtot,3) : '-') + '</b></td>' +
+        '</tr>';
+    }).join('');
+
+    var res = calcEssence(eKey);
+    return '<div class="efc-ess-block">' +
+      '<div class="efc-ess-header">' +
+        '<label class="efc-toggle"><input type="checkbox" class="efc-ess-check" data-essence="' + eKey + '" ' + (td.enabled?'checked':'') + '> <b>' + ess.label + '</b></label>' +
+        '<span class="efc-ess-summary">' + (td.enabled ? res.nbTiges + ' tiges — ' + fmt(res.volTotal,2) + ' m³' : '') + '</span>' +
+      '</div>' +
+      (td.enabled ? '<div class="efc-ess-body">' +
+        '<div class="efc-longueurs">' +
+          'Tarif: <input type="number" class="efc-input-tarif" data-essence="' + eKey + '" value="' + tarif + '" min="10" max="30"> &nbsp;' +
+          'L1: <input type="number" class="efc-input-l" data-essence="' + eKey + '" data-l="1" value="' + (l1||'') + '" min="0" max="50"> &nbsp;' +
+          'L2: <input type="number" class="efc-input-l" data-essence="' + eKey + '" data-l="2" value="' + (l2||'') + '" min="0" max="50"> &nbsp;' +
+          'L3: <input type="number" class="efc-input-l" data-essence="' + eKey + '" data-l="3" value="' + (l3||'') + '" min="0" max="50">' +
+        '</div>' +
+        '<table class="efc-table"><thead><tr>' +
+          '<th>Ø</th><th>Nb</th><th>Tarif</th><th colspan="2">L1</th><th colspan="2">L2</th><th colspan="2">L3</th><th>Vol.total</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody>' +
+        '<tfoot><tr><td colspan="9" class="efc-td-r"><b>TOTAL</b></td>' +
+          '<td class="efc-td-r"><b>' + fmt(res.volTotal,3) + ' m³</b></td>' +
+        '</tr></tfoot></table>' +
+      '</div>' : '') +
+    '</div>';
+  }
+
+  function renderRabais() {
+    var r = calcRabais();
+    var G3 = r.G3;
+
+    var prodRows = [
+      { label:'BC (m³)',     key:'BC',     vol:r.vols.BC,     ca:r.cas.BC,     trans:r.trans.BC },
+      { label:'BPV (stères)',key:'BPV',    vol:r.vols.BPV,    ca:r.cas.BPV,    trans:r.trans.BPV },
+      { label:'BPG (stères)',key:'BPG',    vol:r.vols.BPG,    ca:r.cas.BPG,    trans:r.trans.BPG },
+      { label:'Tritus (T)', key:'TRITUS', vol:r.vols.TRITUS, ca:r.cas.TRITUS, trans:r.trans.TRITUS },
+      { label:'Poteaux (m³F)',key:'POTEAUX',vol:r.vols.POTEAUX,ca:r.cas.POTEAUX,trans:r.trans.POTEAUX }
+    ];
+
+    var prodHTML = prodRows.map(function(p, i) {
+      return '<tr>' +
+        '<td>' + p.label + '</td>' +
+        '<td><input type="number" class="efc-input-pct" data-pi="' + i + '" value="' + (parseFloat(produits[i].pct)||0) + '" min="0" max="100"> %</td>' +
+        '<td class="efc-td-r">' + fmt(p.vol,1) + '</td>' +
+        '<td><input type="number" class="efc-input-prix" data-pi="' + i + '" value="' + (parseFloat(produits[i].prixVente)||0) + '" min="0"></td>' +
+        '<td class="efc-td-r">' + fmt(p.ca,0) + ' €</td>' +
+        '<td><input type="number" class="efc-input-trans" data-pi="' + i + '" value="' + (parseFloat(produits[i].coutTrans)||0) + '" min="0"></td>' +
+        '<td class="efc-td-r">' + fmt(p.trans,0) + ' €</td>' +
+        '</tr>';
+    }).join('');
+
+    var margesHTML = r.tableauMarges.map(function(m) {
+      var cls = m.marge === 0 ? ' efc-marge-zero' : (m.marge > 0 ? ' efc-marge-pos' : '');
+      return '<tr class="' + cls + '">' +
+        '<td>' + (m.marge >= 0 ? '+' : '') + m.marge + '%</td>' +
+        '<td class="efc-td-r">' + fmt(m.achat,0) + ' €</td>' +
+        '<td class="efc-td-r">' + fmt(m.achatM3,2) + ' €/m³</td>' +
+        '</tr>';
+    }).join('');
+
+    return '<div class="efc-rabais-block">' +
+      '<h4>Paramètres économiques</h4>' +
+      '<div class="efc-params-grid">' +
+        '<label>Volume total G3 (m³): <input type="number" id="efc-vol-g3" value="' + G3 + '" min="0"></label>' +
+        '<label>Prix exploit (€/st): <input type="number" id="efc-prix-expl" value="' + prixExplST + '" min="0"></label>' +
+        '<label>Prix Vabres (€/st): <input type="number" id="efc-prix-vabres" value="' + prixVabres + '" min="0"></label>' +
+        '<label>Frais divers (€): <input type="number" id="efc-frais-divers" value="' + fraisDivers + '" min="0"></label>' +
+      '</div>' +
+      '<h4>Produits</h4>' +
+      '<table class="efc-table"><thead><tr>' +
+        '<th>Produit</th><th>% vol.</th><th>Volume</th><th>Prix vente</th><th>CA</th><th>Coût trans.</th><th>Trans.</th>' +
+      '</tr></thead><tbody>' + prodHTML + '</tbody>' +
+      '<tfoot><tr><td colspan="4"><b>CA TOTAL</b></td><td class="efc-td-r"><b>' + fmt(r.caTotal,0) + ' €</b></td>' +
+        '<td></td><td class="efc-td-r"><b>' + fmt(r.transTotal,0) + ' €</b></td></tr>' +
+        '<tr><td colspan="4">Coût exploitation</td><td class="efc-td-r">' + fmt(r.coutExpl,0) + ' €</td><td colspan="2"></td></tr>' +
+      '</tfoot></table>' +
+      '<h4>Tableau des prix d'achat selon marge</h4>' +
+      '<table class="efc-table efc-table-marges"><thead><tr><th>Marge EFC</th><th>Prix achat</th><th>€/m³</th></tr></thead>' +
+      '<tbody>' + margesHTML + '</tbody></table>' +
+    '</div>';
+  }
+
+  // ---- HTML complet de la fiche ----
+  var html = '<div id="efc-fiche" style="padding:16px;font-size:13px;">' +
+    '<div class="efc-header-row">' +
+      '<div><label>Article: <input type="text" id="efc-article" class="efc-input-text" value="' + (ficheData.article||parcelle.nom||'') + '"></label></div>' +
+      '<div><label>Localisation: <input type="text" id="efc-localisation" class="efc-input-text" value="' + (ficheData.localisation||parcelle.commune||'') + '"></label></div>' +
+      '<div><label>Date: <input type="text" id="efc-date" class="efc-input-text" value="' + (ficheData.date||new Date().toLocaleDateString('fr-FR')) + '"></label></div>' +
+    '</div>' +
+    '<div class="efc-tabs">' +
+      '<button class="efc-tab-btn active" data-tab="volumes">📊 Volumes</button>' +
+      '<button class="efc-tab-btn" data-tab="rabais">💰 Estimation</button>' +
+    '</div>' +
+    '<div id="efc-tab-volumes" class="efc-tab-content">' +
+      essences.map(function(e){ return renderTigesTable(e.key); }).join('') +
+    '</div>' +
+    '<div id="efc-tab-rabais" class="efc-tab-content" style="display:none">' +
+      renderRabais() +
+    '</div>' +
+    '<div class="efc-footer">' +
+      '<button id="efc-save-btn" class="btn btn-primary">💾 Enregistrer</button>' +
+      '<button id="efc-cancel-btn" class="btn btn-secondary">Annuler</button>' +
+    '</div>' +
+  '</div>';
+
+  modal.innerHTML = '<div class="fiche-modal-header">' +
+    '<h3>Estimation EFC — ' + (parcelle.nom || '') + '</h3>' +
+    '<button class="fiche-close-btn" onclick="closeFicheModal()">✕</button>' +
+  '</div>' + html;
+  overlay.style.display = 'block';
+  modal.style.display = 'block';
+
+  // ---- Styles ----
+  if (!document.getElementById('efc-styles')) {
+    var style = document.createElement('style');
+    style.id = 'efc-styles';
+    style.textContent = [
+      '.efc-header-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}',
+      '.efc-input-text{border:1px solid #ccc;border-radius:4px;padding:2px 6px;width:160px}',
+      '.efc-tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:2px solid #2d6a4f}',
+      '.efc-tab-btn{background:#f0f0f0;border:1px solid #ccc;border-radius:4px 4px 0 0;padding:6px 16px;cursor:pointer;font-size:13px}',
+      '.efc-tab-btn.active{background:#2d6a4f;color:#fff;border-color:#2d6a4f}',
+      '.efc-ess-block{border:1px solid #ddd;border-radius:6px;margin-bottom:10px;overflow:hidden}',
+      '.efc-ess-header{background:#f7f7f7;padding:8px 12px;display:flex;align-items:center;gap:12px;cursor:pointer}',
+      '.efc-ess-summary{color:#666;font-size:12px}',
+      '.efc-ess-body{padding:8px 12px}',
+      '.efc-longueurs{margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+      '.efc-input-n,.efc-input-l,.efc-input-tarif{width:56px;border:1px solid #ccc;border-radius:3px;padding:2px 4px;text-align:center}',
+      '.efc-table{width:100%;border-collapse:collapse;font-size:12px}',
+      '.efc-table th{background:#2d6a4f;color:#fff;padding:4px 6px;text-align:center}',
+      '.efc-table td{padding:3px 6px;border-bottom:1px solid #eee}',
+      '.efc-table tfoot td{background:#f0f7f3;font-weight:bold}',
+      '.efc-td-c{text-align:center}.efc-td-r{text-align:right}',
+      '.efc-rabais-block{padding:4px}',
+      '.efc-params-grid{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}',
+      '.efc-params-grid label{display:flex;align-items:center;gap:6px;font-size:12px}',
+      '.efc-params-grid input{width:80px;border:1px solid #ccc;border-radius:3px;padding:2px 4px}',
+      '.efc-input-pct,.efc-input-prix,.efc-input-trans{width:64px;border:1px solid #ccc;border-radius:3px;padding:2px 4px;text-align:right}',
+      '.efc-table-marges{max-width:340px}',
+      '.efc-marge-zero{background:#fff9c4;font-weight:bold}',
+      '.efc-marge-pos{color:#1a7a3a}',
+      '.efc-footer{margin-top:16px;display:flex;gap:10px;justify-content:flex-end}',
+      '.efc-toggle{display:flex;align-items:center;gap:6px}'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  // ---- Événements ----
+  function rerender() {
+    var tabVol = document.getElementById('efc-tab-volumes');
+    var tabRab = document.getElementById('efc-tab-rabais');
+    var activeTab = modal.querySelector('.efc-tab-btn.active');
+    var tabName = activeTab ? activeTab.getAttribute('data-tab') : 'volumes';
+
+    if (tabVol) {
+      tabVol.innerHTML = essences.map(function(e){ return renderTigesTable(e.key); }).join('');
+      bindTigesEvents();
+    }
+    if (tabRab && tabName === 'rabais') {
+      tabRab.innerHTML = renderRabais();
+      bindRabaisEvents();
+    }
+  }
+
+  function bindTigesEvents() {
+    modal.querySelectorAll('.efc-ess-check').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        var eKey = this.getAttribute('data-essence');
+        tigesData[eKey].enabled = this.checked;
+        rerender();
+      });
+    });
+    modal.querySelectorAll('.efc-input-n').forEach(function(inp) {
+      inp.addEventListener('change', function() {
+        var eKey = this.getAttribute('data-essence');
+        var d    = this.getAttribute('data-diam');
+        tigesData[eKey].tiges[d] = parseInt(this.value) || 0;
+        rerender();
+      });
+    });
+    modal.querySelectorAll('.efc-input-l').forEach(function(inp) {
+      inp.addEventListener('change', function() {
+        var eKey = this.getAttribute('data-essence');
+        var li   = 'longueur' + this.getAttribute('data-l');
+        tigesData[eKey][li] = parseFloat(this.value) || 0;
+        rerender();
+      });
+    });
+    modal.querySelectorAll('.efc-input-tarif').forEach(function(inp) {
+      inp.addEventListener('change', function() {
+        var eKey = this.getAttribute('data-essence');
+        tigesData[eKey].tarif = parseFloat(this.value) || essences.find(function(e){return e.key===eKey;}).tarif_defaut;
+        rerender();
+      });
+    });
+  }
+
+  function bindRabaisEvents() {
+    var g3inp = document.getElementById('efc-vol-g3');
+    if (g3inp) g3inp.addEventListener('change', function(){ volTotalG3 = parseFloat(this.value)||0; rerender(); });
+    var peinp = document.getElementById('efc-prix-expl');
+    if (peinp) peinp.addEventListener('change', function(){ prixExplST = parseFloat(this.value)||0; rerender(); });
+    var pvinp = document.getElementById('efc-prix-vabres');
+    if (pvinp) pvinp.addEventListener('change', function(){ prixVabres = parseFloat(this.value)||0; rerender(); });
+    var fdinp = document.getElementById('efc-frais-divers');
+    if (fdinp) fdinp.addEventListener('change', function(){ fraisDivers = parseFloat(this.value)||0; rerender(); });
+
+    modal.querySelectorAll('.efc-input-pct').forEach(function(inp) {
+      inp.addEventListener('change', function() {
+        produits[parseInt(this.getAttribute('data-pi'))].pct = parseFloat(this.value)||0;
+        rerender();
+      });
+    });
+    modal.querySelectorAll('.efc-input-prix').forEach(function(inp) {
+      inp.addEventListener('change', function() {
+        produits[parseInt(this.getAttribute('data-pi'))].prixVente = parseFloat(this.value)||0;
+        rerender();
+      });
+    });
+    modal.querySelectorAll('.efc-input-trans').forEach(function(inp) {
+      inp.addEventListener('change', function() {
+        produits[parseInt(this.getAttribute('data-pi'))].coutTrans = parseFloat(this.value)||0;
+        rerender();
+      });
+    });
+  }
+
+  // Tabs
+  modal.querySelectorAll('.efc-tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      modal.querySelectorAll('.efc-tab-btn').forEach(function(b){ b.classList.remove('active'); });
+      this.classList.add('active');
+      var tab = this.getAttribute('data-tab');
+      document.getElementById('efc-tab-volumes').style.display = tab==='volumes' ? '' : 'none';
+      var tabRab = document.getElementById('efc-tab-rabais');
+      tabRab.style.display = tab==='rabais' ? '' : 'none';
+      if (tab === 'rabais') { tabRab.innerHTML = renderRabais(); bindRabaisEvents(); }
+    });
+  });
+
+  bindTigesEvents();
+
+  // Sauvegarde
+  var saveBtn = document.getElementById('efc-save-btn');
+  if (saveBtn) saveBtn.addEventListener('click', function() {
+    var ficheEFC = {
+      article: document.getElementById('efc-article').value,
+      localisation: document.getElementById('efc-localisation').value,
+      date: document.getElementById('efc-date').value,
+      ratioST_T: ratioST_T, ratioST_M3: ratioST_M3,
+      prixVabres: prixVabres, prixExplST: prixExplST, fraisDivers: fraisDivers,
+      volTotalG3: volTotalG3, produits: produits, tigesData: tigesData
+    };
+    if (!retour) retour = {};
+    retour.ficheEFC = ficheEFC;
+    if (typeof sauvegarderRetour === 'function') {
+      sauvegarderRetour(parcelle, retour, modeRetour);
+    }
+    closeFicheModal();
+  });
+
+  var cancelBtn = document.getElementById('efc-cancel-btn');
+  if (cancelBtn) cancelBtn.addEventListener('click', closeFicheModal);
+}
+
+function closeFicheModal() {
+  var overlay = document.getElementById('fiche-modal-overlay');
+  var modal   = document.getElementById('fiche-modal');
+  if (overlay) overlay.style.display = 'none';
+  if (modal)   modal.style.display   = 'none';
+}
 
   init();
 })();

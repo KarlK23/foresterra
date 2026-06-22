@@ -1,0 +1,10 @@
+var fs=require('fs');
+var s=fs.readFileSync('public/app.js','utf8');
+s=s.split('openFicheModal(parcelle, retour, false)').join('openFicheModalEFC(parcelle, retour, false)');
+s=s.split('openFicheModal(parcelle, retour, true)').join('openFicheModalEFC(parcelle, retour, true)');
+s=s.split('fiche:retourExist.fiche||null').join('fiche:null, ficheEFC:retourExist.ficheEFC||null');
+s=s.split('var hasFiche=!!(retour&&retour.fiche)').join('var hasFiche=!!(retour&&(retour.fiche||retour.ficheEFC))');
+var before=s.slice(0,58163);
+var after=s.slice(71644);
+fs.writeFileSync('public/app.js', before+after);
+console.log('ok - taille:'+fs.readFileSync('public/app.js').length);
