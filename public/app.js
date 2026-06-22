@@ -1087,7 +1087,7 @@
   }
 
 
-  function closeFicheModal() {
+  window.closeFicheModal=function() {
     var overlay=document.getElementById("fiche-modal-overlay");
     var modal  =document.getElementById("fiche-modal");
     if (overlay) overlay.style.display="none";
@@ -1101,7 +1101,7 @@
 // Basée sur TABLEUR_ESTIM_EFC_type_BD
 // ============================================================
 
-function openFicheModalEFC(parcelle, retour, modeRetour) {
+window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
   var overlay = document.getElementById('fiche-modal-overlay');
   var modal = document.getElementById('fiche-modal');
   if (!overlay || !modal) return;
@@ -1555,7 +1555,7 @@ function openFicheModalEFC(parcelle, retour, modeRetour) {
   if (cancelBtn) cancelBtn.addEventListener('click', closeFicheModal);
 }
 
-function closeFicheModal() {
+window.closeFicheModal=function() {
   var overlay = document.getElementById('fiche-modal-overlay');
   var modal   = document.getElementById('fiche-modal');
   if (overlay) overlay.style.display = 'none';
