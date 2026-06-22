@@ -1086,8 +1086,6 @@
     return res;
   }
 
-  var _fichePfunction(e){ alert("Erreur sauvegarde: "+e.message); });
-  }
 
   function closeFicheModal() {
     var overlay=document.getElementById("fiche-modal-overlay");
