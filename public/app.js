@@ -1545,8 +1545,8 @@ window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
     };
     if (!retour) retour = {};
     retour.ficheEFC = ficheEFC;
-    if (typeof sauvegarderRetour === 'function') {
-      sauvegarderRetour(parcelle, retour, modeRetour);
+    if (typeof window.sauvegarderRetour === 'function') {
+      if (typeof window.sauvegarderRetour === 'function') {(parcelle, retour, modeRetour);
     }
     closeFicheModal();
   });
