@@ -1545,9 +1545,10 @@ window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
     };
     if (!retour) retour = {};
     retour.ficheEFC = ficheEFC;
-    if (typeof window.sauvegarderRetour === 'function') {
-      window.sauvegarderRetour(parcelle, retour, modeRetour);
-    }
+var idx=state.retours.findIndex(function(rx){return rx.parcelleId===parcelle.id;});
+if(idx!==-1) state.retours[idx].ficheEFC=ficheEFC; else state.retours.push({parcelleId:parcelle.id,ficheEFC:ficheEFC});
+var btn=document.querySelector('.btn-save-retour[data-pid="'+parcelle.id+'"]');
+if(btn) btn.click();    }
     closeFicheModal();
   });
 
