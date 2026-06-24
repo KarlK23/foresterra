@@ -1545,7 +1545,7 @@ window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
     };
     if (!retour) retour = {};
     retour.ficheEFC = ficheEFC;
-api("POST","/api/retours",{parcelleId:parcelle.id, ficheEFC:ficheEFC, statut:'en_cours'}).then(function(){
+api("POST","/api/retours",{parcelleId:parcelle.id, ficheEFC:ficheEFC}).then(function(){
   var btn=document.querySelector('.btn-save-retour[data-pid="'+parcelle.id+'"]');
   if(btn) btn.click();
 });

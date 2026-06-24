@@ -262,7 +262,7 @@ app.post("/api/retours", requireAuth, async function (req, res) {
   const user = req.session.user;
   if (user.role !== "acheteur") return res.status(403).json({ error: "Reserve aux acheteurs" });
 
-  const { parcelleId, description, estimation, achete, prix, statut, fiche } = req.body;
+  const { parcelleId, description, estimation, achete, prix, statut, fiche, ficheEFC } = req.body;
   const db = await loadDb();
 
   // verify assignment
@@ -280,12 +280,15 @@ app.post("/api/retours", requireAuth, async function (req, res) {
     db.retours.push(retour);
   }
 
-  retour.description = description || "";
-  retour.statut = statut || "";
-  retour.fiche = fiche || retour.fiche || null;
-  retour.estimation = estimation || "";
-  retour.achete = !!achete;
-  retour.prix = achete ? (prix || "") : "";
+  // Mise a jour partielle : un champ absent (undefined) du body conserve sa valeur existante,
+  // ce qui permet a l'appel de sauvegarde de la fiche EFC de ne pas ecraser le reste du retour.
+  retour.description = description !== undefined ? description : (retour.description || "");
+  retour.statut = statut !== undefined ? statut : (retour.statut || "");
+  retour.fiche = fiche !== undefined ? fiche : (retour.fiche || null);
+  retour.ficheEFC = ficheEFC !== undefined ? ficheEFC : (retour.ficheEFC || null);
+  retour.estimation = estimation !== undefined ? estimation : (retour.estimation || "");
+  retour.achete = achete !== undefined ? !!achete : !!retour.achete;
+  retour.prix = retour.achete ? (prix !== undefined ? prix : (retour.prix || "")) : "";
   retour.date = new Date().toISOString();
 
   await saveDb(db);
