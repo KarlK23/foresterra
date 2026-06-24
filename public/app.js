@@ -46,11 +46,58 @@
     return '<div style="margin-bottom:12px;border-radius:10px;overflow:hidden;border:1px solid #e0ddd5;background:#f9faf7;">'+
       '<div style="padding:6px 12px;background:#e8f5ef;display:flex;justify-content:space-between;align-items:center;">'+
         '<span style="font-size:11px;font-weight:600;color:#0f6e56;">📄 Page '+pageNum+' — '+esc(pdf.originalName)+'</span>'+
-        '<a href="'+url+'#page='+pageNum+'" target="_blank" style="font-size:11px;color:#0f6e56;text-decoration:none;">Ouvrir ↗</a>'+
+        '<button class="btn-open-pdf-viewer" data-pdfid="'+pdf.id+'" data-page="'+pageNum+'" style="font-size:11px;color:#0f6e56;background:none;border:none;text-decoration:none;cursor:pointer;padding:0;font-family:inherit;">Ouvrir ↗</button>'+
       '</div>'+
       '<canvas class="pdf-preview" data-url="'+url+'" data-page="'+pageNum+'" style="display:block;width:100%;background:#fff;"></canvas>'+
     '</div>';
   }
+
+  // ── VISIONNEUSE PDF PLEIN ÉCRAN (avec flèche retour, pour ne pas quitter l'app sur mobile) ──
+  window.openPdfViewer = function(pdfId, pageNum) {
+    var pdf = state.pdfs.find(function(p){return p.id===pdfId;});
+    if (!pdf) return;
+    var overlay = document.getElementById('pdf-viewer-overlay');
+    var modal = document.getElementById('pdf-viewer-modal');
+    if (!overlay || !modal) return;
+    var url = '/api/proxy-pdf?url='+encodeURIComponent(pdf.filename);
+
+    overlay.style.cssText = "display:block;position:fixed;inset:0;background:#1c1c1a;z-index:200;";
+    modal.style.cssText = "display:flex;flex-direction:column;position:fixed;inset:0;background:#1c1c1a;z-index:201;";
+
+    modal.innerHTML =
+      '<div style="padding:10px 14px;background:#fff;border-bottom:1px solid #e0ddd5;display:flex;align-items:center;gap:10px;flex-shrink:0;">'+
+        '<button id="btn-pdf-viewer-back" style="background:none;border:none;font-size:24px;color:#0f6e56;cursor:pointer;padding:4px 10px;line-height:1;">←</button>'+
+        '<span style="font-size:13px;font-weight:600;color:#2c2c2a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 Page '+pageNum+' — '+esc(pdf.originalName)+'</span>'+
+      '</div>'+
+      '<div id="pdf-viewer-scroll" style="flex:1;overflow:auto;background:#1c1c1a;text-align:center;-webkit-overflow-scrolling:touch;">'+
+        '<canvas id="pdf-viewer-canvas" style="background:#fff;margin:10px auto;display:block;max-width:100%;box-shadow:0 4px 20px rgba(0,0,0,0.4);"></canvas>'+
+      '</div>';
+
+    document.getElementById('btn-pdf-viewer-back').addEventListener('click', closePdfViewer);
+
+    var canvas = document.getElementById('pdf-viewer-canvas');
+    getPdfDoc(url).then(function(doc){ return doc.getPage(pageNum); }).then(function(page){
+      var scrollEl = document.getElementById('pdf-viewer-scroll');
+      var maxW = (scrollEl.clientWidth || 400) - 20;
+      var vp = page.getViewport({scale:1});
+      var fitScale = maxW / vp.width;
+      var pixelRatio = Math.max(2, window.devicePixelRatio || 1);
+      var sv = page.getViewport({scale: fitScale * pixelRatio});
+      canvas.width = sv.width; canvas.height = sv.height;
+      canvas.style.width = maxW+'px';
+      page.render({canvasContext:canvas.getContext('2d'), viewport:sv});
+    }).catch(function(){
+      var scrollEl = document.getElementById('pdf-viewer-scroll');
+      if (scrollEl) scrollEl.innerHTML = '<p style="color:#fff;padding:30px;">Impossible de charger le PDF.</p>';
+    });
+  };
+
+  window.closePdfViewer = function() {
+    var overlay = document.getElementById('pdf-viewer-overlay');
+    var modal = document.getElementById('pdf-viewer-modal');
+    if (overlay) overlay.style.display = 'none';
+    if (modal) { modal.style.display = 'none'; modal.innerHTML = ''; }
+  };
 
   // ── UTILS ──────────────────────────────────────────────────────────
   function esc(s) {
@@ -166,7 +213,9 @@
       '<div id="pdf-modal-overlay" style="display:none;"></div>'+
       '<div id="pdf-modal" style="display:none;"></div>'+
       '<div id="fiche-modal-overlay" style="display:none;"></div>'+
-      '<div id="fiche-modal" style="display:none;"></div>';
+      '<div id="fiche-modal" style="display:none;"></div>'+
+      '<div id="pdf-viewer-overlay" style="display:none;"></div>'+
+      '<div id="pdf-viewer-modal" style="display:none;"></div>';
     document.getElementById("btn-logout").addEventListener("click", logout);
     root.addEventListener("change", function(e){
       if(e.target && e.target.id==="filtre-acheteur"){ state.filtreAcheteur=e.target.value||null; renderPatronContent(); }
@@ -343,7 +392,11 @@
   function bindPatronEvents() {
     var el = document.getElementById("patron-content");
 
-    
+    el.querySelectorAll(".btn-open-pdf-viewer").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        openPdfViewer(btn.getAttribute("data-pdfid"), parseInt(btn.getAttribute("data-page")));
+      });
+    });
 
     el.querySelectorAll(".btn-select-pages").forEach(function(btn){
       btn.addEventListener("click", function(){
@@ -702,7 +755,9 @@
       '<div id="pdf-modal-overlay" style="display:none;"></div>'+
       '<div id="pdf-modal" style="display:none;"></div>'+
       '<div id="fiche-modal-overlay" style="display:none;"></div>'+
-      '<div id="fiche-modal" style="display:none;"></div>';
+      '<div id="fiche-modal" style="display:none;"></div>'+
+      '<div id="pdf-viewer-overlay" style="display:none;"></div>'+
+      '<div id="pdf-viewer-modal" style="display:none;"></div>';
     document.getElementById("btn-logout").addEventListener("click", logout);
     renderAcheteurContent();
   }
@@ -854,6 +909,12 @@
     });
 
     // PDF viewer + sélection de pages acheteur
+
+    el.querySelectorAll(".btn-open-pdf-viewer").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        openPdfViewer(btn.getAttribute("data-pdfid"), parseInt(btn.getAttribute("data-page")));
+      });
+    });
 
     el.querySelectorAll(".btn-acheteur-select-pages").forEach(function(btn){
       btn.addEventListener("click", function(){
