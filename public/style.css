@@ -482,4 +482,23 @@ button.danger {
   .efc-params-grid {
     flex-direction: column;
   }
+  #pdf-modal {
+    top: 0!important;
+    left: 0!important;
+    right: 0!important;
+    bottom: 0!important;
+    width: 100%!important;
+    max-width: 100%!important;
+    border-radius: 0;
+  }
+  .pdfsel-row {
+    flex-direction: column!important;
+  }
+  .pdfsel-side {
+    width: 100%!important;
+    max-height: 42vh!important;
+    overflow-y: auto!important;
+    border-left: none!important;
+    border-top: 1px solid var(--border)!important;
+  }
 }

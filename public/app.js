@@ -597,9 +597,9 @@
         '<div><p style="margin:0;font-weight:600;font-size:15px;">Ventes — triées par date automatiquement</p>'+
         '<p style="margin:2px 0 0;font-size:12px;color:#6f6e69;">Pages détectées et triées par date de vente</p></div>'+
         '<button id="btn-close-modal" style="font-size:20px;border:none;background:none;cursor:pointer;color:#6f6e69;padding:4px 8px;">✕</button></div>'+
-      '<div style="display:flex;flex:1;overflow:hidden;">'+
+      '<div class="pdfsel-row" style="display:flex;flex:1;overflow:hidden;">'+
         '<div style="flex:1;overflow-y:auto;background:#404040;padding:10px;" id="patron-pdf-viewer"><p style="color:#ccc;text-align:center;padding:40px;">Chargement...</p></div>'+
-        '<div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">'+
+        '<div class="pdfsel-side" style="width:280px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">'+
           '<div style="padding:10px 14px;border-bottom:1px solid #e0ddd5;flex-shrink:0;">'+
             '<p style="margin:0 0 6px;font-size:13px;font-weight:600;">Assigner à :</p>'+
             '<div id="modal-acheteur-list" style="display:flex;flex-direction:column;gap:5px;">'+pdfAcheteurBtns()+'</div></div>'+
@@ -940,11 +940,11 @@
         '</div>'+
         '<button id="btn-close-modal" style="font-size:22px;border:none;background:none;cursor:pointer;color:#6f6e69;padding:4px 10px;">x</button>'+
       '</div>'+
-      '<div style="display:flex;flex:1;overflow:hidden;">'+
+      '<div class="pdfsel-row" style="display:flex;flex:1;overflow:hidden;">'+
         '<div id="ach-viewer" style="flex:1;overflow-y:auto;background:#404040;padding:20px;display:flex;flex-direction:column;gap:14px;">'+
           '<p style="color:#ccc;text-align:center;font-size:13px;padding:40px 0;">Chargement du PDF...</p>'+
         '</div>'+
-        '<div style="width:200px;flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid #e0ddd5;">'+
+        '<div class="pdfsel-side" style="width:200px;flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid #e0ddd5;">'+
           '<div style="padding:10px 12px;border-bottom:1px solid #e0ddd5;background:#f7f6f3;flex-shrink:0;">'+
             '<p style="margin:0;font-size:12px;font-weight:700;">Selectionnees</p>'+
           '</div>'+
