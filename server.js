@@ -8,7 +8,7 @@ const bcrypt = require("bcryptjs");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const { loadDb, saveDb } = require("./db");
+const { loadDb, saveDb, acquireWriteLock } = require("./db");
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -96,38 +96,48 @@ app.post("/api/acheteurs", requirePatron, async function (req, res) {
     return res.status(400).json({ error: "Champs manquants" });
   }
 
-  const db = await loadDb();
-  if (db.users.find(function (u) { return u.username === username; })) {
-    return res.status(409).json({ error: "Cet identifiant existe deja" });
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    if (db.users.find(function (u) { return u.username === username; })) {
+      return res.status(409).json({ error: "Cet identifiant existe deja" });
+    }
+
+    const newUser = {
+      id: genId("u"),
+      username: username,
+      passwordHash: bcrypt.hashSync(password, 10),
+      role: "acheteur",
+      nom: nom
+    };
+    db.users.push(newUser);
+    await saveDb(db);
+
+    res.json({ acheteur: { id: newUser.id, username: newUser.username, nom: newUser.nom } });
+  } finally {
+    release();
   }
-
-  const newUser = {
-    id: genId("u"),
-    username: username,
-    passwordHash: bcrypt.hashSync(password, 10),
-    role: "acheteur",
-    nom: nom
-  };
-  db.users.push(newUser);
-  await saveDb(db);
-
-  res.json({ acheteur: { id: newUser.id, username: newUser.username, nom: newUser.nom } });
 });
 
 app.delete("/api/acheteurs/:id", requirePatron, async function (req, res) {
-  const db = await loadDb();
-  const id = req.params.id;
-  db.users = db.users.filter(function (u) {
-    return u.id !== id;
-  });
-  db.affectations = db.affectations.filter(function (a) {
-    return a.acheteurId !== id;
-  });
-  db.retours = db.retours.filter(function (r) {
-    return r.acheteurId !== id;
-  });
-  await saveDb(db);
-  res.json({ ok: true });
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    const id = req.params.id;
+    db.users = db.users.filter(function (u) {
+      return u.id !== id;
+    });
+    db.affectations = db.affectations.filter(function (a) {
+      return a.acheteurId !== id;
+    });
+    db.retours = db.retours.filter(function (r) {
+      return r.acheteurId !== id;
+    });
+    await saveDb(db);
+    res.json({ ok: true });
+  } finally {
+    release();
+  }
 });
 
 // ---------- PDF UPLOAD ----------
@@ -141,12 +151,17 @@ app.post("/api/pdfs", requirePatron, async function (req, res) {
       { resource_type: "raw", public_id: id, folder: "foresterra", use_filename: true, unique_filename: false },
       async function(error, result) {
         if (error) return res.status(500).json({ error: "Cloudinary: " + error.message });
-        const db = await loadDb();
-        if (!Array.isArray(db.pdfs)) db.pdfs = [];
-        const pdfEntry = { id, originalName: req.file.originalname, filename: result.secure_url, uploadedAt: new Date().toISOString() };
-        db.pdfs.push(pdfEntry);
-        await saveDb(db);
-        res.json({ pdf: pdfEntry });
+        const release = await acquireWriteLock();
+        try {
+          const db = await loadDb();
+          if (!Array.isArray(db.pdfs)) db.pdfs = [];
+          const pdfEntry = { id, originalName: req.file.originalname, filename: result.secure_url, uploadedAt: new Date().toISOString() };
+          db.pdfs.push(pdfEntry);
+          await saveDb(db);
+          res.json({ pdf: pdfEntry });
+        } finally {
+          release();
+        }
       }
     );
     require("stream").Readable.from(req.file.buffer).pipe(stream);
@@ -159,16 +174,21 @@ app.get("/api/pdfs", requireAuth, async function (req, res) {
 });
 
 app.delete("/api/pdfs/:id", requirePatron, async function (req, res) {
-  const db = await loadDb();
-  const id = req.params.id;
-  const pdfEntry = db.pdfs.find(function (p) { return p.id === id; });
-  if (pdfEntry) {
-    const filePath = path.join(UPLOADS_DIR, pdfEntry.filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    const id = req.params.id;
+    const pdfEntry = db.pdfs.find(function (p) { return p.id === id; });
+    if (pdfEntry) {
+      const filePath = path.join(UPLOADS_DIR, pdfEntry.filename);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+    db.pdfs = db.pdfs.filter(function (p) { return p.id !== id; });
+    await saveDb(db);
+    res.json({ ok: true });
+  } finally {
+    release();
   }
-  db.pdfs = db.pdfs.filter(function (p) { return p.id !== id; });
-  await saveDb(db);
-  res.json({ ok: true });
 });
 
 // ---------- PARCELLES ----------
@@ -203,58 +223,73 @@ app.post("/api/parcelles", requirePatron, async function (req, res) {
   const { lignes, pdfId, pageNums } = req.body;
   if (!Array.isArray(lignes)) return res.status(400).json({ error: "lignes doit etre un tableau" });
 
-  const db = await loadDb();
-  const maxOrdre = db.parcelles.reduce(function (m, p) {
-    return Math.max(m, p.ordre || 0);
-  }, 0);
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    const maxOrdre = db.parcelles.reduce(function (m, p) {
+      return Math.max(m, p.ordre || 0);
+    }, 0);
 
-  let ordre = maxOrdre;
-  const created = [];
-  lignes.forEach(function (label, i) {
-    const trimmed = String(label).trim();
-    if (!trimmed) return;
-    ordre += 1;
-    const pageNum = Array.isArray(pageNums) && pageNums[i] ? parseInt(pageNums[i]) : null;
-    const p = { id: genId("p"), label: trimmed, ordre: ordre, pdfId: pdfId || null, pageNum: pageNum };
-    db.parcelles.push(p);
-    created.push(p);
-  });
+    let ordre = maxOrdre;
+    const created = [];
+    lignes.forEach(function (label, i) {
+      const trimmed = String(label).trim();
+      if (!trimmed) return;
+      ordre += 1;
+      const pageNum = Array.isArray(pageNums) && pageNums[i] ? parseInt(pageNums[i]) : null;
+      const p = { id: genId("p"), label: trimmed, ordre: ordre, pdfId: pdfId || null, pageNum: pageNum };
+      db.parcelles.push(p);
+      created.push(p);
+    });
 
-  await saveDb(db);
-  res.json({ parcelles: created });
+    await saveDb(db);
+    res.json({ parcelles: created });
+  } finally {
+    release();
+  }
 });
 
 app.delete("/api/parcelles/:id", requirePatron, async function (req, res) {
-  const db = await loadDb();
-  const id = req.params.id;
-  db.parcelles = db.parcelles.filter(function (p) { return p.id !== id; });
-  db.affectations = db.affectations.filter(function (a) { return a.parcelleId !== id; });
-  db.retours = db.retours.filter(function (r) { return r.parcelleId !== id; });
-  await saveDb(db);
-  res.json({ ok: true });
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    const id = req.params.id;
+    db.parcelles = db.parcelles.filter(function (p) { return p.id !== id; });
+    db.affectations = db.affectations.filter(function (a) { return a.parcelleId !== id; });
+    db.retours = db.retours.filter(function (r) { return r.parcelleId !== id; });
+    await saveDb(db);
+    res.json({ ok: true });
+  } finally {
+    release();
+  }
 });
 
 // ---------- AFFECTATIONS ----------
 app.post("/api/affectations", requirePatron, async function (req, res) {
   const { parcelleId, acheteurId, assign } = req.body;
-  const db = await loadDb();
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
 
-  const exists = db.affectations.find(function (a) {
-    return a.parcelleId === parcelleId && a.acheteurId === acheteurId;
-  });
-
-  if (assign) {
-    if (!exists) {
-      db.affectations.push({ parcelleId: parcelleId, acheteurId: acheteurId });
-    }
-  } else {
-    db.affectations = db.affectations.filter(function (a) {
-      return !(a.parcelleId === parcelleId && a.acheteurId === acheteurId);
+    const exists = db.affectations.find(function (a) {
+      return a.parcelleId === parcelleId && a.acheteurId === acheteurId;
     });
-  }
 
-  await saveDb(db);
-  res.json({ ok: true });
+    if (assign) {
+      if (!exists) {
+        db.affectations.push({ parcelleId: parcelleId, acheteurId: acheteurId });
+      }
+    } else {
+      db.affectations = db.affectations.filter(function (a) {
+        return !(a.parcelleId === parcelleId && a.acheteurId === acheteurId);
+      });
+    }
+
+    await saveDb(db);
+    res.json({ ok: true });
+  } finally {
+    release();
+  }
 });
 
 // ---------- RETOURS (acheteur) ----------
@@ -263,36 +298,41 @@ app.post("/api/retours", requireAuth, async function (req, res) {
   if (user.role !== "acheteur") return res.status(403).json({ error: "Reserve aux acheteurs" });
 
   const { parcelleId, description, estimation, achete, prix, statut, fiche, ficheEFC } = req.body;
-  const db = await loadDb();
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
 
-  // verify assignment
-  const isAssigned = db.affectations.find(function (a) {
-    return a.parcelleId === parcelleId && a.acheteurId === user.id;
-  });
-  if (!isAssigned) return res.status(403).json({ error: "Parcelle non assignee" });
+    // verify assignment
+    const isAssigned = db.affectations.find(function (a) {
+      return a.parcelleId === parcelleId && a.acheteurId === user.id;
+    });
+    if (!isAssigned) return res.status(403).json({ error: "Parcelle non assignee" });
 
-  let retour = db.retours.find(function (r) {
-    return r.parcelleId === parcelleId && r.acheteurId === user.id;
-  });
+    let retour = db.retours.find(function (r) {
+      return r.parcelleId === parcelleId && r.acheteurId === user.id;
+    });
 
-  if (!retour) {
-    retour = { id: genId("r"), parcelleId: parcelleId, acheteurId: user.id };
-    db.retours.push(retour);
+    if (!retour) {
+      retour = { id: genId("r"), parcelleId: parcelleId, acheteurId: user.id };
+      db.retours.push(retour);
+    }
+
+    // Mise a jour partielle : un champ absent (undefined) du body conserve sa valeur existante,
+    // ce qui permet a l'appel de sauvegarde de la fiche EFC de ne pas ecraser le reste du retour.
+    retour.description = description !== undefined ? description : (retour.description || "");
+    retour.statut = statut !== undefined ? statut : (retour.statut || "");
+    retour.fiche = fiche !== undefined ? fiche : (retour.fiche || null);
+    retour.ficheEFC = ficheEFC !== undefined ? ficheEFC : (retour.ficheEFC || null);
+    retour.estimation = estimation !== undefined ? estimation : (retour.estimation || "");
+    retour.achete = achete !== undefined ? !!achete : !!retour.achete;
+    retour.prix = retour.achete ? (prix !== undefined ? prix : (retour.prix || "")) : "";
+    retour.date = new Date().toISOString();
+
+    await saveDb(db);
+    res.json({ retour: retour });
+  } finally {
+    release();
   }
-
-  // Mise a jour partielle : un champ absent (undefined) du body conserve sa valeur existante,
-  // ce qui permet a l'appel de sauvegarde de la fiche EFC de ne pas ecraser le reste du retour.
-  retour.description = description !== undefined ? description : (retour.description || "");
-  retour.statut = statut !== undefined ? statut : (retour.statut || "");
-  retour.fiche = fiche !== undefined ? fiche : (retour.fiche || null);
-  retour.ficheEFC = ficheEFC !== undefined ? ficheEFC : (retour.ficheEFC || null);
-  retour.estimation = estimation !== undefined ? estimation : (retour.estimation || "");
-  retour.achete = achete !== undefined ? !!achete : !!retour.achete;
-  retour.prix = retour.achete ? (prix !== undefined ? prix : (retour.prix || "")) : "";
-  retour.date = new Date().toISOString();
-
-  await saveDb(db);
-  res.json({ retour: retour });
 });
 
 // ---------- USERS (pour affichage noms dans vue patron) ----------
@@ -314,74 +354,84 @@ app.post("/api/parcelles-acheteur", requireAuth, async function (req, res) {
   let idx = -1;
   if (!Array.isArray(lignes)) return res.status(400).json({ error: "lignes doit être un tableau" });
 
-  const db = await loadDb();
-  const maxOrdre = db.parcelles.reduce(function(m, p) { return Math.max(m, p.ordre || 0); }, 0);
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    const maxOrdre = db.parcelles.reduce(function(m, p) { return Math.max(m, p.ordre || 0); }, 0);
 
-  let ordre = maxOrdre;
-  const created = [];
-  lignes.forEach(function(label) {
-    idx++;
-    const trimmed = String(label).trim();
-    if (!trimmed) return;
-    // Éviter les doublons pour cet acheteur
-    const exists = db.parcelles.find(function(p) {
-      return p.label === trimmed && p.pdfId === (pdfId || null) &&
-        db.affectations.find(function(a) { return a.parcelleId === p.id && a.acheteurId === user.id; });
+    let ordre = maxOrdre;
+    const created = [];
+    lignes.forEach(function(label) {
+      idx++;
+      const trimmed = String(label).trim();
+      if (!trimmed) return;
+      // Éviter les doublons pour cet acheteur
+      const exists = db.parcelles.find(function(p) {
+        return p.label === trimmed && p.pdfId === (pdfId || null) &&
+          db.affectations.find(function(a) { return a.parcelleId === p.id && a.acheteurId === user.id; });
+      });
+      if (exists) { created.push(exists); return; }
+      ordre += 1;
+      const pNum = Array.isArray(pageNums) && pageNums[idx] ? parseInt(pageNums[idx]) : null;
+      const p = { id: genId("p"), label: trimmed, ordre: ordre, pdfId: pdfId || null, pageNum: pNum };
+      db.parcelles.push(p);
+      created.push(p);
     });
-    if (exists) { created.push(exists); return; }
-    ordre += 1;
-    const pNum = Array.isArray(pageNums) && pageNums[idx] ? parseInt(pageNums[idx]) : null;
-    const p = { id: genId("p"), label: trimmed, ordre: ordre, pdfId: pdfId || null, pageNum: pNum };
-    db.parcelles.push(p);
-    created.push(p);
-  });
 
-  // Auto-assigner à cet acheteur
-  const newAffectations = [];
-  created.forEach(function(p) {
-    const exists = db.affectations.find(function(a) { return a.parcelleId === p.id && a.acheteurId === user.id; });
-    if (!exists) {
-      const aff = { parcelleId: p.id, acheteurId: user.id };
-      db.affectations.push(aff);
-      newAffectations.push(aff);
-    }
-  });
+    // Auto-assigner à cet acheteur
+    const newAffectations = [];
+    created.forEach(function(p) {
+      const exists = db.affectations.find(function(a) { return a.parcelleId === p.id && a.acheteurId === user.id; });
+      if (!exists) {
+        const aff = { parcelleId: p.id, acheteurId: user.id };
+        db.affectations.push(aff);
+        newAffectations.push(aff);
+      }
+    });
 
-  await saveDb(db);
-  res.json({ parcelles: created, affectations: newAffectations });
+    await saveDb(db);
+    res.json({ parcelles: created, affectations: newAffectations });
+  } finally {
+    release();
+  }
 });
 
 // ---------- RETOURS PATRON (modification par le patron) ----------
 app.post("/api/retours-patron", requirePatron, async function (req, res) {
   const { parcelleId, acheteurId, description, estimation, achete, prix, statut, fiche, ficheEFC } = req.body;
-  const db = await loadDb();
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
 
-  // Vérifier que la parcelle existe
-  const parcelle = db.parcelles.find(function(p) { return p.id === parcelleId; });
-  if (!parcelle) return res.status(404).json({ error: "Parcelle introuvable" });
+    // Vérifier que la parcelle existe
+    const parcelle = db.parcelles.find(function(p) { return p.id === parcelleId; });
+    if (!parcelle) return res.status(404).json({ error: "Parcelle introuvable" });
 
-  let retour = db.retours.find(function (r) {
-    return r.parcelleId === parcelleId && r.acheteurId === acheteurId;
-  });
+    let retour = db.retours.find(function (r) {
+      return r.parcelleId === parcelleId && r.acheteurId === acheteurId;
+    });
 
-  if (!retour) {
-    retour = { id: genId("r"), parcelleId: parcelleId, acheteurId: acheteurId };
-    db.retours.push(retour);
+    if (!retour) {
+      retour = { id: genId("r"), parcelleId: parcelleId, acheteurId: acheteurId };
+      db.retours.push(retour);
+    }
+
+    // Mise a jour partielle : un champ absent (undefined) du body conserve sa valeur existante,
+    // ce qui permet a l'appel de sauvegarde de la fiche EFC de ne pas ecraser le reste du retour.
+    retour.description = description !== undefined ? description : (retour.description || "");
+    retour.statut = statut !== undefined ? statut : (retour.statut || "");
+    retour.fiche = fiche !== undefined ? fiche : (retour.fiche || null);
+    retour.ficheEFC = ficheEFC !== undefined ? ficheEFC : (retour.ficheEFC || null);
+    retour.estimation = estimation !== undefined ? estimation : (retour.estimation || "");
+    retour.achete = achete !== undefined ? !!achete : !!retour.achete;
+    retour.prix = retour.achete ? (prix !== undefined ? prix : (retour.prix || "")) : "";
+    retour.date = new Date().toISOString();
+
+    await saveDb(db);
+    res.json({ retour: retour });
+  } finally {
+    release();
   }
-
-  // Mise a jour partielle : un champ absent (undefined) du body conserve sa valeur existante,
-  // ce qui permet a l'appel de sauvegarde de la fiche EFC de ne pas ecraser le reste du retour.
-  retour.description = description !== undefined ? description : (retour.description || "");
-  retour.statut = statut !== undefined ? statut : (retour.statut || "");
-  retour.fiche = fiche !== undefined ? fiche : (retour.fiche || null);
-  retour.ficheEFC = ficheEFC !== undefined ? ficheEFC : (retour.ficheEFC || null);
-  retour.estimation = estimation !== undefined ? estimation : (retour.estimation || "");
-  retour.achete = achete !== undefined ? !!achete : !!retour.achete;
-  retour.prix = retour.achete ? (prix !== undefined ? prix : (retour.prix || "")) : "";
-  retour.date = new Date().toISOString();
-
-  await saveDb(db);
-  res.json({ retour: retour });
 });
 
 

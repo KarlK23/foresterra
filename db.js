@@ -30,4 +30,21 @@ async function saveDb(db) {
   }
 }
 
-module.exports = { loadDb, saveDb };
+// ---------- Verrou d'ecriture global ----------
+// saveDb() remplace INTEGRALEMENT chaque collection a partir d'un instantane pris par loadDb().
+// Sans verrou, deux requetes concurrentes qui font chacune loadDb() -> mutation -> saveDb() peuvent
+// se chevaucher : la requete qui termine en second ecrase silencieusement les changements de l'autre
+// (y compris des enregistrements qu'elle n'a jamais touches), ce qui provoque des pertes de donnees
+// aleatoires (parcelles, retours ou fiches qui "disparaissent"). acquireWriteLock() serialise tous
+// les cycles loadDb()->saveDb() pour que deux ecritures ne puissent jamais se chevaucher.
+let _writeLockQueue = Promise.resolve();
+
+function acquireWriteLock() {
+  let release;
+  const ticket = new Promise(function (resolve) { release = resolve; });
+  const previous = _writeLockQueue;
+  _writeLockQueue = previous.then(function () { return ticket; });
+  return previous.then(function () { return release; });
+}
+
+module.exports = { loadDb, saveDb, acquireWriteLock };
