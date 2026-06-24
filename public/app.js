@@ -1545,12 +1545,22 @@ window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
     };
     if (!retour) retour = {};
     retour.ficheEFC = ficheEFC;
-api("POST","/api/retours",{parcelleId:parcelle.id, ficheEFC:ficheEFC}).then(function(d){
-  var idx=state.retours.findIndex(function(rx){return rx.parcelleId===parcelle.id;});
-  if(idx!==-1) state.retours[idx]=d.retour; else state.retours.push(d.retour);
-  var btn=document.querySelector('.btn-save-retour[data-pid="'+parcelle.id+'"]');
-  if(btn) btn.click();
-});
+    var isPatron = state.user && state.user.role === "patron";
+    if (isPatron) {
+      api("POST","/api/retours-patron",{parcelleId:parcelle.id, acheteurId:retour.acheteurId, ficheEFC:ficheEFC}).then(function(d){
+        var idx=state.retours.findIndex(function(rx){return rx.parcelleId===parcelle.id && rx.acheteurId===retour.acheteurId;});
+        if(idx!==-1) state.retours[idx]=d.retour; else state.retours.push(d.retour);
+        var btn=document.querySelector('.btn-patron-save[data-pid="'+parcelle.id+'"][data-aid="'+retour.acheteurId+'"]');
+        if(btn) btn.click();
+      }).catch(function(e){ alert("Erreur: "+e.message); });
+    } else {
+      api("POST","/api/retours",{parcelleId:parcelle.id, ficheEFC:ficheEFC}).then(function(d){
+        var idx=state.retours.findIndex(function(rx){return rx.parcelleId===parcelle.id;});
+        if(idx!==-1) state.retours[idx]=d.retour; else state.retours.push(d.retour);
+        var btn=document.querySelector('.btn-save-retour[data-pid="'+parcelle.id+'"]');
+        if(btn) btn.click();
+      }).catch(function(e){ alert("Erreur: "+e.message); });
+    }
     closeFicheModal();
   });
 

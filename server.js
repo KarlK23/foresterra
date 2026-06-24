@@ -353,7 +353,7 @@ app.post("/api/parcelles-acheteur", requireAuth, async function (req, res) {
 
 // ---------- RETOURS PATRON (modification par le patron) ----------
 app.post("/api/retours-patron", requirePatron, async function (req, res) {
-  const { parcelleId, acheteurId, description, estimation, achete, prix, statut, fiche } = req.body;
+  const { parcelleId, acheteurId, description, estimation, achete, prix, statut, fiche, ficheEFC } = req.body;
   const db = await loadDb();
 
   // Vérifier que la parcelle existe
@@ -369,13 +369,16 @@ app.post("/api/retours-patron", requirePatron, async function (req, res) {
     db.retours.push(retour);
   }
 
-  retour.description = description || "";
-  retour.estimation  = estimation  || "";
-  retour.achete      = !!achete;
-  retour.prix        = achete ? (prix || "") : "";
-  retour.statut      = statut || "";
-  retour.fiche       = fiche  || retour.fiche || null;
-  retour.date        = new Date().toISOString();
+  // Mise a jour partielle : un champ absent (undefined) du body conserve sa valeur existante,
+  // ce qui permet a l'appel de sauvegarde de la fiche EFC de ne pas ecraser le reste du retour.
+  retour.description = description !== undefined ? description : (retour.description || "");
+  retour.statut = statut !== undefined ? statut : (retour.statut || "");
+  retour.fiche = fiche !== undefined ? fiche : (retour.fiche || null);
+  retour.ficheEFC = ficheEFC !== undefined ? ficheEFC : (retour.ficheEFC || null);
+  retour.estimation = estimation !== undefined ? estimation : (retour.estimation || "");
+  retour.achete = achete !== undefined ? !!achete : !!retour.achete;
+  retour.prix = retour.achete ? (prix !== undefined ? prix : (retour.prix || "")) : "";
+  retour.date = new Date().toISOString();
 
   await saveDb(db);
   res.json({ retour: retour });
