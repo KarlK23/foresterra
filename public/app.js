@@ -1511,6 +1511,7 @@ window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
       renderRabais() +
     '</div>' +
     '<div class="efc-footer">' +
+      '<button id="efc-print-btn" class="btn btn-secondary">🖨️ Imprimer</button>' +
       '<button id="efc-save-btn" class="btn btn-primary">💾 Enregistrer</button>' +
       '<button id="efc-cancel-btn" class="btn btn-secondary">Annuler</button>' +
     '</div>' +
@@ -1553,7 +1554,13 @@ window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
       '.efc-marge-zero{background:#fff9c4;font-weight:bold}',
       '.efc-marge-pos{color:#1a7a3a}',
       '.efc-footer{margin-top:16px;display:flex;gap:10px;justify-content:flex-end}',
-      '.efc-toggle{display:flex;align-items:center;gap:6px}'
+      '.efc-toggle{display:flex;align-items:center;gap:6px}',
+      '@media print{#app>*:not(#fiche-modal){display:none !important}',
+      '#fiche-modal-overlay{display:none !important}',
+      '#fiche-modal{display:block !important;position:static !important;box-shadow:none !important;max-height:none !important;overflow:visible !important;width:100% !important;margin:0 !important}',
+      '#fiche-modal .fiche-close-btn,#fiche-modal .efc-tabs,#fiche-modal .efc-footer{display:none !important}',
+      '#efc-tab-volumes,#efc-tab-rabais{display:block !important}',
+      '}'
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -1687,6 +1694,25 @@ window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
 
   var cancelBtn = document.getElementById('efc-cancel-btn');
   if (cancelBtn) cancelBtn.addEventListener('click', closeFicheModal);
+
+  var printBtn = document.getElementById('efc-print-btn');
+  if (printBtn) printBtn.addEventListener('click', function() {
+    var tabVol = document.getElementById('efc-tab-volumes');
+    var tabRab = document.getElementById('efc-tab-rabais');
+    if (tabRab && !tabRab.innerHTML.trim()) { tabRab.innerHTML = renderRabais(); bindRabaisEvents(); }
+    var prevVol = tabVol ? tabVol.style.display : '';
+    var prevRab = tabRab ? tabRab.style.display : '';
+    if (tabVol) tabVol.style.display = '';
+    if (tabRab) tabRab.style.display = '';
+    var restore = function() {
+      if (tabVol) tabVol.style.display = prevVol;
+      if (tabRab) tabRab.style.display = prevRab;
+      window.removeEventListener('afterprint', restore);
+    };
+    window.addEventListener('afterprint', restore);
+    window.print();
+    setTimeout(restore, 1000);
+  });
 }
 
 window.closeFicheModal=function() {
