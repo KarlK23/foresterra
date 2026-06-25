@@ -62,6 +62,25 @@ function genId(prefix) {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
 }
 
+// ---------- NOTIFICATIONS ----------
+const NOTIFICATIONS_MAX = 500; // plafond global, evite une croissance illimitee
+
+function pushNotification(db, userId, message, parcelleId, acheteurId) {
+  if (!Array.isArray(db.notifications)) db.notifications = [];
+  db.notifications.push({
+    id: genId("n"),
+    userId: userId,
+    message: message,
+    parcelleId: parcelleId || null,
+    acheteurId: acheteurId || null,
+    read: false,
+    date: new Date().toISOString()
+  });
+  if (db.notifications.length > NOTIFICATIONS_MAX) {
+    db.notifications = db.notifications.slice(db.notifications.length - NOTIFICATIONS_MAX);
+  }
+}
+
 // ---------- AUTH HELPERS ----------
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: "Non authentifie" });
@@ -408,6 +427,7 @@ app.post("/api/retours", requireAuth, async function (req, res) {
       return r.parcelleId === parcelleId && r.acheteurId === user.id;
     });
     const isNew = !retour;
+    const histLenBefore = retour && Array.isArray(retour.history) ? retour.history.length : 0;
 
     retour = mergeRetour(
       retour,
@@ -417,6 +437,14 @@ app.post("/api/retours", requireAuth, async function (req, res) {
       { nom: user.nom, role: "acheteur" }
     );
     if (isNew) db.retours.push(retour);
+
+    if (retour.history.length > histLenBefore) {
+      const parcelle = db.parcelles.find(function (p) { return p.id === parcelleId; });
+      const label = parcelle ? parcelle.label : "une parcelle";
+      db.users.filter(function (u) { return u.role === "patron"; }).forEach(function (patron) {
+        pushNotification(db, patron.id, (user.nom || "Un acheteur") + " a mis a jour \"" + label + "\"", parcelleId, user.id);
+      });
+    }
 
     await saveDb(db);
     res.json({ retour: retour });
@@ -501,6 +529,7 @@ app.post("/api/retours-patron", requirePatron, async function (req, res) {
       return r.parcelleId === parcelleId && r.acheteurId === acheteurId;
     });
     const isNew = !retour;
+    const histLenBefore = retour && Array.isArray(retour.history) ? retour.history.length : 0;
 
     retour = mergeRetour(
       retour,
@@ -511,6 +540,10 @@ app.post("/api/retours-patron", requirePatron, async function (req, res) {
     );
     if (isNew) db.retours.push(retour);
 
+    if (retour.history.length > histLenBefore) {
+      pushNotification(db, acheteurId, (req.session.user.nom || "Le patron") + " a mis a jour \"" + parcelle.label + "\"", parcelleId, acheteurId);
+    }
+
     await saveDb(db);
     res.json({ retour: retour });
   } finally {
@@ -518,6 +551,44 @@ app.post("/api/retours-patron", requirePatron, async function (req, res) {
   }
 });
 
+
+// ---------- NOTIFICATIONS ----------
+app.get("/api/notifications", requireAuth, async function (req, res) {
+  const db = await loadDb();
+  const mine = (db.notifications || [])
+    .filter(function (n) { return n.userId === req.session.user.id; })
+    .sort(function (a, b) { return new Date(b.date) - new Date(a.date); })
+    .slice(0, 50);
+  res.json({ notifications: mine });
+});
+
+app.post("/api/notifications/:id/read", requireAuth, async function (req, res) {
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    const n = (db.notifications || []).find(function (x) { return x.id === req.params.id && x.userId === req.session.user.id; });
+    if (!n) return res.status(404).json({ error: "Notification introuvable" });
+    n.read = true;
+    await saveDb(db);
+    res.json({ ok: true });
+  } finally {
+    release();
+  }
+});
+
+app.post("/api/notifications/read-all", requireAuth, async function (req, res) {
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    (db.notifications || []).forEach(function (n) {
+      if (n.userId === req.session.user.id) n.read = true;
+    });
+    await saveDb(db);
+    res.json({ ok: true });
+  } finally {
+    release();
+  }
+});
 
 // ---------- PROXY PDF CLOUDINARY ----------
 app.get("/api/proxy-pdf", requireAuth, function(req, res) {

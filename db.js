@@ -18,10 +18,11 @@ async function loadDb() {
   const affectations = await db.collection("affectations").find({}).toArray();
   const retours = await db.collection("retours").find({}).toArray();
   const pdfs = await db.collection("pdfs").find({}).toArray();
-  return { users, parcelles, affectations, retours, pdfs };
+  const notifications = await db.collection("notifications").find({}).toArray();
+  return { users, parcelles, affectations, retours, pdfs, notifications };
 }
 
-const _COLLECTIONS = ["users", "parcelles", "affectations", "retours", "pdfs"];
+const _COLLECTIONS = ["users", "parcelles", "affectations", "retours", "pdfs", "notifications"];
 
 async function _replaceAllCollections(mdb, db, session) {
   const opts = session ? { session } : {};

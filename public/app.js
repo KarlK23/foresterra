@@ -4,7 +4,7 @@
   var root = document.getElementById("app");
   var state = {
     user: null, parcelles: [], affectations: [], retours: [],
-    acheteurs: [], pdfs: [], usersMap: {},
+    acheteurs: [], pdfs: [], usersMap: {}, notifications: [],
     pdfSelectorId: null, pdfSelectedPages: [], pdfAssignAcheteurId: null, pdfPages: [], filtreAcheteur: null, filtrePdf: null
   };
 
@@ -164,6 +164,67 @@
       '<ul style="margin:6px 0 0;padding-left:18px;list-style:disc;">'+items+'</ul></details>';
   }
 
+  // ── NOTIFICATIONS ────────────────────────────────────────────────────
+  var _notifPollHandle = null;
+  function loadNotifications() {
+    return api("GET", "/api/notifications").then(function (d) {
+      state.notifications = d.notifications || [];
+      updateNotifBadge();
+      return state.notifications;
+    }).catch(function () { return []; });
+  }
+  function updateNotifBadge() {
+    var badge = document.getElementById("notif-badge");
+    if (!badge) return;
+    var unread = state.notifications.filter(function (n) { return !n.read; }).length;
+    if (unread > 0) { badge.textContent = unread > 9 ? "9+" : String(unread); badge.style.display = "inline-block"; }
+    else badge.style.display = "none";
+  }
+  function notifDropdownHtml() {
+    if (!state.notifications.length) return '<p class="empty" style="padding:14px;margin:0;">Aucune notification</p>';
+    var items = state.notifications.map(function (n) {
+      return '<div class="notif-item' + (n.read ? '' : ' unread') + '" data-id="' + esc(n.id) + '">' +
+        '<p style="margin:0 0 2px;">' + esc(n.message) + '</p>' +
+        '<p class="notif-date">' + esc(fmtD(n.date)) + '</p>' +
+      '</div>';
+    }).join('');
+    return '<div class="notif-list">' + items + '</div>' +
+      '<div class="notif-footer"><button id="btn-notif-readall">Tout marquer comme lu</button></div>';
+  }
+  function bindNotifDropdownEvents() {
+    document.querySelectorAll('.notif-item.unread').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var id = el.getAttribute('data-id');
+        api("POST", "/api/notifications/" + id + "/read").then(function () {
+          return loadNotifications();
+        }).then(function () {
+          var dropdown = document.getElementById("notif-dropdown");
+          if (dropdown && dropdown.style.display !== "none") {
+            dropdown.innerHTML = notifDropdownHtml();
+            bindNotifDropdownEvents();
+          }
+        }).catch(function () {});
+      });
+    });
+    var readAllBtn = document.getElementById("btn-notif-readall");
+    if (readAllBtn) readAllBtn.addEventListener('click', function () {
+      api("POST", "/api/notifications/read-all").then(function () {
+        return loadNotifications();
+      }).then(function () {
+        var dropdown = document.getElementById("notif-dropdown");
+        if (dropdown) {
+          dropdown.innerHTML = notifDropdownHtml();
+          bindNotifDropdownEvents();
+        }
+      }).catch(function () {});
+    });
+  }
+  function startNotifPolling() {
+    loadNotifications();
+    if (_notifPollHandle) clearInterval(_notifPollHandle);
+    _notifPollHandle = setInterval(loadNotifications, 30000);
+  }
+
   // ── INIT ───────────────────────────────────────────────────────────
   function init() {
     api("GET", "/api/me").then(function (d) {
@@ -194,6 +255,7 @@
       state.pdfs        = r[2].pdfs        || [];
       if (state.user.role==="patron") { state.acheteurs=r[3].acheteurs||[]; renderPatronApp(); }
       else renderAcheteurApp();
+      startNotifPolling();
     }).catch(function(e){ alert("Erreur chargement: "+e.message); });
   }
 
@@ -217,7 +279,8 @@
   }
   function logout() {
     api("POST","/api/logout").then(function(){
-      state.user=null; state.parcelles=[]; state.affectations=[]; state.retours=[];
+      if (_notifPollHandle) { clearInterval(_notifPollHandle); _notifPollHandle = null; }
+      state.user=null; state.parcelles=[]; state.affectations=[]; state.retours=[]; state.notifications=[];
       state.acheteurs=[]; state.pdfs=[]; renderLogin();
     });
   }
@@ -226,13 +289,36 @@
   function headerHtml() {
     return '<header class="header"><div><h1>Foresterra</h1>'+
       '<p class="subtitle">Parcelles à visiter et historique d\'achat</p></div>'+
-      '<div class="user-badge"><p class="name">'+esc(state.user.nom)+'</p>'+
+      '<div class="user-badge">'+
+      '<div class="notif-wrap">'+
+        '<button id="btn-notif-bell" title="Notifications">🔔<span id="notif-badge" class="notif-badge" style="display:none;"></span></button>'+
+        '<div id="notif-dropdown" class="notif-dropdown" style="display:none;"></div>'+
+      '</div>'+
+      '<p class="name">'+esc(state.user.nom)+'</p>'+
       '<p class="role">'+(state.user.role==="patron"?"Patron":"Acheteur")+'</p>'+
       '<button id="btn-change-password" style="margin-top:6px;">Changer le mot de passe</button>'+
       '<button id="btn-logout" style="margin-top:6px;">Déconnexion</button></div></header>';
   }
 
   function bindHeaderEvents() {
+    var notifBell = document.getElementById("btn-notif-bell");
+    var notifDropdown = document.getElementById("notif-dropdown");
+    if (notifBell && notifDropdown) {
+      notifBell.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var isOpen = notifDropdown.style.display !== "none";
+        if (isOpen) { notifDropdown.style.display = "none"; return; }
+        notifDropdown.innerHTML = notifDropdownHtml();
+        notifDropdown.style.display = "block";
+        bindNotifDropdownEvents();
+      });
+      document.addEventListener("click", function (e) {
+        if (notifDropdown.style.display !== "none" && !notifDropdown.contains(e.target) && e.target !== notifBell) {
+          notifDropdown.style.display = "none";
+        }
+      });
+      updateNotifBadge();
+    }
     document.getElementById("btn-logout").addEventListener("click", logout);
     document.getElementById("btn-change-password").addEventListener("click", function(){
       var currentPassword=prompt("Mot de passe actuel :");
