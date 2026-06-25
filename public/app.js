@@ -138,6 +138,32 @@
     return val==="estime"||val==="interet_faible"||val==="interet_moyen"||val==="interet_fort"||val==="achete";
   }
 
+  // ── HISTORIQUE DES MODIFICATIONS DE RETOUR ──────────────────────────
+  function describeChanges(changes) {
+    if (!changes) return "";
+    if (changes.creation) return "Création de la fiche de suivi";
+    var labels = {statut:"Statut", estimation:"Estimation", prix:"Prix", description:"Notes", fiche:"Fiche EFC"};
+    var parts = [];
+    Object.keys(changes).forEach(function(k){
+      var c = changes[k];
+      if (k==="achete") { parts.push("Acheté : "+(c.from?"Oui":"Non")+" → "+(c.to?"Oui":"Non")); return; }
+      if (c===true) { parts.push(labels[k]||k); return; }
+      var from = (c.from===""||c.from==null) ? "—" : String(c.from);
+      var to = (c.to===""||c.to==null) ? "—" : String(c.to);
+      parts.push((labels[k]||k)+" : "+esc(from)+" → "+esc(to));
+    });
+    return parts.join(" · ");
+  }
+  function historyHtml(history) {
+    if (!history || !history.length) return "";
+    var items = history.slice().reverse().map(function(h){
+      return '<li style="margin-bottom:4px;"><span style="color:#a3a098;">'+esc(fmtD(h.date))+'</span> — <b>'+esc(h.actorNom||"Inconnu")+'</b> ('+(h.actorRole==="patron"?"Patron":"Acheteur")+') : '+describeChanges(h.changes)+'</li>';
+    }).join('');
+    return '<details style="margin:6px 0;font-size:11px;color:#6f6e69;">'+
+      '<summary style="cursor:pointer;">🕓 Historique ('+history.length+')</summary>'+
+      '<ul style="margin:6px 0 0;padding-left:18px;list-style:disc;">'+items+'</ul></details>';
+  }
+
   // ── INIT ───────────────────────────────────────────────────────────
   function init() {
     api("GET", "/api/me").then(function (d) {
@@ -394,6 +420,7 @@
 
             // Date + bouton sauvegarder
             if (r.date) html += '<p style="margin:0 0 8px;font-size:11px;color:#a3a098;">Dernière mise à jour acheteur : '+esc(fmtD(r.date))+'</p>';
+            html += historyHtml(r.history);
             html += '<button class="btn-patron-save primary" data-pid="'+pid+'" data-aid="'+aid+'" data-uid="'+uid+'" style="font-size:12px;">💾 Sauvegarder les modifications</button>';
 
             html += '</div>';
@@ -862,6 +889,7 @@
           '<textarea class="desc-input" data-pid="'+p.id+'" rows="2">'+esc(retour.description||"")+'</textarea></div>';
 
         if (retour.date) html+='<p class="card-meta" style="margin-bottom:8px;">Dernière mise à jour : '+esc(fmtD(retour.date))+'</p>';
+        html+=historyHtml(retour.history);
         html+='<button class="btn-save-retour primary" data-pid="'+p.id+'">Enregistrer</button></div>';
       });
     }

@@ -101,3 +101,74 @@ test("mute et retourne le meme objet quand `existing` est fourni", function () {
   const retour = mergeRetour(existing, { description: "x" }, genId, fixedNow);
   assert.equal(retour, existing);
 });
+
+test("la creation d'un retour ajoute une entree d'historique 'creation'", function () {
+  const retour = mergeRetour(
+    null,
+    { parcelleId: "p1", acheteurId: "u1", statut: "estime" },
+    genId,
+    fixedNow,
+    { nom: "Jean Acheteur", role: "acheteur" }
+  );
+
+  assert.equal(retour.history.length, 1);
+  assert.equal(retour.history[0].actorNom, "Jean Acheteur");
+  assert.equal(retour.history[0].actorRole, "acheteur");
+  assert.equal(retour.history[0].changes.creation, true);
+});
+
+test("une modification reelle ajoute une entree avec from/to", function () {
+  const existing = mergeRetour(
+    null,
+    { parcelleId: "p1", acheteurId: "u1", statut: "estime" },
+    genId,
+    fixedNow,
+    { nom: "Jean Acheteur", role: "acheteur" }
+  );
+
+  const retour = mergeRetour(
+    existing,
+    { statut: "achete", prix: "5000", achete: true },
+    genId,
+    fixedNow,
+    { nom: "Le Patron", role: "patron" }
+  );
+
+  assert.equal(retour.history.length, 2);
+  const last = retour.history[1];
+  assert.equal(last.actorNom, "Le Patron");
+  assert.equal(last.actorRole, "patron");
+  assert.deepEqual(last.changes.statut, { from: "estime", to: "achete" });
+  assert.deepEqual(last.changes.achete, { from: false, to: true });
+});
+
+test("une sauvegarde sans changement reel n'ajoute pas d'entree d'historique", function () {
+  const existing = mergeRetour(
+    null,
+    { parcelleId: "p1", acheteurId: "u1", statut: "estime" },
+    genId,
+    fixedNow,
+    { nom: "Jean Acheteur", role: "acheteur" }
+  );
+
+  const retour = mergeRetour(existing, { statut: "estime" }, genId, fixedNow, { nom: "Jean Acheteur", role: "acheteur" });
+
+  assert.equal(retour.history.length, 1);
+});
+
+test("l'historique est plafonne a 20 entrees (les plus anciennes sont supprimees)", function () {
+  let retour = mergeRetour(
+    null,
+    { parcelleId: "p1", acheteurId: "u1", statut: "estime0" },
+    genId,
+    fixedNow,
+    { nom: "Jean", role: "acheteur" }
+  );
+
+  for (let i = 1; i <= 25; i++) {
+    retour = mergeRetour(retour, { statut: "estime" + i }, genId, fixedNow, { nom: "Jean", role: "acheteur" });
+  }
+
+  assert.equal(retour.history.length, 20);
+  assert.equal(retour.history[retour.history.length - 1].changes.statut.to, "estime25");
+});

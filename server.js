@@ -412,7 +412,9 @@ app.post("/api/retours", requireAuth, async function (req, res) {
     retour = mergeRetour(
       retour,
       { parcelleId: parcelleId, acheteurId: user.id, description: description, estimation: estimation, achete: achete, prix: prix, statut: statut, fiche: fiche, ficheEFC: ficheEFC },
-      genId
+      genId,
+      undefined,
+      { nom: user.nom, role: "acheteur" }
     );
     if (isNew) db.retours.push(retour);
 
@@ -503,7 +505,9 @@ app.post("/api/retours-patron", requirePatron, async function (req, res) {
     retour = mergeRetour(
       retour,
       { parcelleId: parcelleId, acheteurId: acheteurId, description: description, estimation: estimation, achete: achete, prix: prix, statut: statut, fiche: fiche, ficheEFC: ficheEFC },
-      genId
+      genId,
+      undefined,
+      { nom: req.session.user.nom, role: "patron" }
     );
     if (isNew) db.retours.push(retour);
 
