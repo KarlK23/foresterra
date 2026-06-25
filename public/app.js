@@ -112,11 +112,70 @@
     var d = new Date(iso);
     return d.toLocaleDateString("fr-FR") + " " + d.toLocaleTimeString("fr-FR", {hour:"2-digit",minute:"2-digit"});
   }
+  // ── FILE D'ATTENTE D'ECRITURE HORS-LIGNE ────────────────────────────
+  var OFFLINE_QUEUE_KEY = "foresterra_offline_queue";
+  function getOfflineQueue() {
+    try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function setOfflineQueue(q) {
+    try { localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q)); } catch (e) {}
+    updateOfflineIndicator();
+  }
+  function queueOfflineRequest(method, url, body) {
+    var q = getOfflineQueue();
+    q.push({ id: "q_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7), method: method, url: url, body: body, ts: new Date().toISOString() });
+    setOfflineQueue(q);
+  }
+  function isNetworkError(err) {
+    return (err && err.name === "TypeError") || (typeof navigator !== "undefined" && navigator.onLine === false);
+  }
+  function updateOfflineIndicator() {
+    var el = document.getElementById("offline-queue-info");
+    if (!el) return;
+    var n = getOfflineQueue().length;
+    if (n > 0) {
+      el.textContent = "⏳ " + n + " modification" + (n > 1 ? "s" : "") + " en attente de synchronisation";
+      el.style.display = "block";
+    } else {
+      el.style.display = "none";
+    }
+  }
+  var _isFlushingOfflineQueue = false;
+  function flushOfflineQueue() {
+    if (_isFlushingOfflineQueue) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    var queue = getOfflineQueue();
+    if (!queue.length) return;
+    _isFlushingOfflineQueue = true;
+    var step = function () {
+      var q = getOfflineQueue();
+      if (!q.length) { _isFlushingOfflineQueue = false; loadAll(); return; }
+      var item = q[0];
+      var opts = { method: item.method, headers: { "Content-Type": "application/json" }, credentials: "same-origin" };
+      if (item.body !== undefined) opts.body = JSON.stringify(item.body);
+      fetch(item.url, opts).then(function (r) {
+        return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || "Erreur"); return d; });
+      }).then(function () {
+        q.shift(); setOfflineQueue(q); step();
+      }).catch(function () { _isFlushingOfflineQueue = false; });
+    };
+    step();
+  }
+  if (typeof window !== "undefined") window.addEventListener("online", flushOfflineQueue);
+
   function api(method, url, body) {
     var opts = {method:method, headers:{"Content-Type":"application/json"}, credentials:"same-origin"};
     if (body !== undefined) opts.body = JSON.stringify(body);
     return fetch(url, opts).then(function (r) {
       return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || "Erreur"); return d; });
+    }).catch(function (err) {
+      if (method !== "GET" && isNetworkError(err)) {
+        queueOfflineRequest(method, url, body);
+        var queuedErr = new Error("Connexion indisponible : la modification a été enregistrée et sera synchronisée automatiquement dès le retour du réseau.");
+        queuedErr.queued = true;
+        throw queuedErr;
+      }
+      throw err;
     });
   }
 
@@ -221,8 +280,9 @@
   }
   function startNotifPolling() {
     loadNotifications();
+    flushOfflineQueue();
     if (_notifPollHandle) clearInterval(_notifPollHandle);
-    _notifPollHandle = setInterval(loadNotifications, 30000);
+    _notifPollHandle = setInterval(function () { loadNotifications(); flushOfflineQueue(); }, 30000);
   }
 
   // ── INIT ───────────────────────────────────────────────────────────
@@ -290,6 +350,7 @@
     return '<header class="header"><div><h1>Foresterra</h1>'+
       '<p class="subtitle">Parcelles à visiter et historique d\'achat</p></div>'+
       '<div class="user-badge">'+
+      '<p id="offline-queue-info" style="display:none;margin:0 0 4px;font-size:11px;color:#ffd966;font-weight:600;"></p>'+
       '<div class="notif-wrap">'+
         '<button id="btn-notif-bell" title="Notifications">🔔<span id="notif-badge" class="notif-badge" style="display:none;"></span></button>'+
         '<div id="notif-dropdown" class="notif-dropdown" style="display:none;"></div>'+
@@ -319,6 +380,7 @@
       });
       updateNotifBadge();
     }
+    updateOfflineIndicator();
     document.getElementById("btn-logout").addEventListener("click", logout);
     document.getElementById("btn-change-password").addEventListener("click", function(){
       var currentPassword=prompt("Mot de passe actuel :");
