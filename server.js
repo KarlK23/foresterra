@@ -12,23 +12,46 @@ const { loadDb, saveDb, acquireWriteLock } = require("./db");
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+const isProduction = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
 
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
+// Railway (et toute plateforme derriere un reverse proxy) doit etre signale a
+// Express pour que req.ip / req.secure refletent le client reel (en-tetes
+// X-Forwarded-*), sinon les cookies "secure" et le rate-limiting par IP ne
+// fonctionnent pas correctement.
+app.set("trust proxy", 1);
+
 // ---------- MIDDLEWARE ----------
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(UPLOADS_DIR));
 
+let SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  SESSION_SECRET = crypto.randomBytes(32).toString("hex");
+  console.warn(
+    "ATTENTION: la variable d'environnement SESSION_SECRET n'est pas definie. " +
+    "Un secret temporaire a ete genere pour cette execution uniquement " +
+    "(toutes les sessions seront invalidees au prochain redemarrage). " +
+    "Definissez SESSION_SECRET dans les variables d'environnement Railway pour la production."
+  );
+}
+
 app.use(
   session({
-    secret: process.env.SESSION_SECRET||"foresterra2026",
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 } // 7 jours
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 jours
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProduction
+    }
   })
 );
 
@@ -51,8 +74,37 @@ function requirePatron(req, res, next) {
   next();
 }
 
+// ---------- RATE LIMITING (anti brute-force sur /api/login) ----------
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_RATE_LIMIT_MAX = 8;
+const _loginAttempts = new Map(); // ip -> { count, resetAt }
+
+function loginRateLimiter(req, res, next) {
+  const key = req.ip || "unknown";
+  const now = Date.now();
+  let entry = _loginAttempts.get(key);
+  if (!entry || entry.resetAt < now) {
+    entry = { count: 0, resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS };
+    _loginAttempts.set(key, entry);
+  }
+  if (entry.count >= LOGIN_RATE_LIMIT_MAX) {
+    const waitMin = Math.max(1, Math.ceil((entry.resetAt - now) / 60000));
+    return res.status(429).json({ error: "Trop de tentatives de connexion. Reessayez dans " + waitMin + " min." });
+  }
+  entry.count++;
+  next();
+}
+
+// Purge periodique pour eviter une fuite memoire sur un serveur de longue duree
+setInterval(function () {
+  const now = Date.now();
+  for (const [key, entry] of _loginAttempts) {
+    if (entry.resetAt < now) _loginAttempts.delete(key);
+  }
+}, 10 * 60 * 1000);
+
 // ---------- AUTH ROUTES ----------
-app.post("/api/login", async function (req, res) {
+app.post("/api/login", loginRateLimiter, async function (req, res) {
   const { username, password } = req.body;
   const db = await loadDb();
   const user = db.users.find(function (u) {
