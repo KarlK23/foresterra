@@ -461,20 +461,36 @@ button.danger {
     bottom: 0!important;
     border-radius: 0;
   }
+  #efc-fiche {
+    padding: 8px!important;
+  }
   .efc-table {
-    font-size: 10px;
+    font-size: 10px!important;
   }
   .efc-table th, .efc-table td {
-    padding: 2px 3px;
+    padding: 2px 3px!important;
   }
-  .efc-input-n {
-    width: 40px;
+  .efc-input-n, .efc-input-l, .efc-input-tarif {
+    width: 38px!important;
   }
   .efc-longueurs {
-    font-size: 11px;
+    font-size: 11px!important;
   }
   .efc-longueurs input {
-    width: 40px;
+    width: 38px!important;
+  }
+  .efc-input-pct, .efc-input-prix, .efc-input-trans {
+    width: 44px!important;
+    font-size: 11px!important;
+  }
+  .efc-params-grid input {
+    width: 60px!important;
+  }
+  .efc-params-grid label {
+    font-size: 11px!important;
+  }
+  .efc-ess-body, .efc-rabais-block {
+    overflow-x: auto!important;
   }
   .efc-header-row {
     flex-direction: column;
