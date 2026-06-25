@@ -1,12 +1,13 @@
 const { MongoClient } = require("mongodb");
 const MONGODB_URI = process.env.MONGODB_URI;
+let _client = null;
 let _db = null;
 
 async function getDb() {
   if (_db) return _db;
-  const client = new MongoClient(MONGODB_URI);
-  await client.connect();
-  _db = client.db("foresterra");
+  _client = new MongoClient(MONGODB_URI);
+  await _client.connect();
+  _db = _client.db("foresterra");
   return _db;
 }
 
@@ -20,14 +21,53 @@ async function loadDb() {
   return { users, parcelles, affectations, retours, pdfs };
 }
 
-async function saveDb(db) {
-  const mdb = await getDb();
-  for (const col of ["users","parcelles","affectations","retours","pdfs"]) {
-    await mdb.collection(col).deleteMany({});
+const _COLLECTIONS = ["users", "parcelles", "affectations", "retours", "pdfs"];
+
+async function _replaceAllCollections(mdb, db, session) {
+  const opts = session ? { session } : {};
+  for (const col of _COLLECTIONS) {
+    await mdb.collection(col).deleteMany({}, opts);
     if (db[col] && db[col].length > 0) {
-      await mdb.collection(col).insertMany(db[col]);
+      await mdb.collection(col).insertMany(db[col], opts);
     }
   }
+}
+
+// Optimiste au depart : on suppose que le serveur Mongo supporte les
+// transactions (c'est le cas de tout cluster Atlas, meme M0, car Atlas est
+// toujours un replica set). Si une premiere tentative echoue parce que le
+// serveur est un mongod autonome (dev local sans replica set), on bascule
+// definitivement sur le mode sans transaction pour ce process.
+let _transactionsSupported = true;
+
+async function saveDb(db) {
+  const mdb = await getDb();
+
+  if (_transactionsSupported) {
+    const session = _client.startSession();
+    try {
+      await session.withTransaction(async function () {
+        await _replaceAllCollections(mdb, db, session);
+      });
+      return;
+    } catch (err) {
+      const msg = (err && err.message) || "";
+      if (err && (err.code === 20 || /Transaction numbers|Transactions are not supported/i.test(msg))) {
+        console.warn("Transactions Mongo non supportees par ce serveur (pas de replica set) - bascule en mode non transactionnel pour saveDb().");
+        _transactionsSupported = false;
+      } else {
+        throw err;
+      }
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  // Repli : sans transaction (serveur standalone). Reste protege par
+  // acquireWriteLock() cote appelant contre les ecritures concurrentes,
+  // mais une coupure en cours d'ecriture peut laisser les collections dans
+  // un etat incoherent - cas attendu uniquement en dev local sans replica set.
+  await _replaceAllCollections(mdb, db, null);
 }
 
 // ---------- Verrou d'ecriture global ----------
