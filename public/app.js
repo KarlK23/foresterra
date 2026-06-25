@@ -202,7 +202,25 @@
       '<p class="subtitle">Parcelles à visiter et historique d\'achat</p></div>'+
       '<div class="user-badge"><p class="name">'+esc(state.user.nom)+'</p>'+
       '<p class="role">'+(state.user.role==="patron"?"Patron":"Acheteur")+'</p>'+
+      '<button id="btn-change-password" style="margin-top:6px;">Changer le mot de passe</button>'+
       '<button id="btn-logout" style="margin-top:6px;">Déconnexion</button></div></header>';
+  }
+
+  function bindHeaderEvents() {
+    document.getElementById("btn-logout").addEventListener("click", logout);
+    document.getElementById("btn-change-password").addEventListener("click", function(){
+      var currentPassword=prompt("Mot de passe actuel :");
+      if (currentPassword===null) return;
+      var newPassword=prompt("Nouveau mot de passe (4 caractères minimum) :");
+      if (newPassword===null) return;
+      if (!newPassword || newPassword.length<4) { alert("Le mot de passe doit contenir au moins 4 caractères."); return; }
+      var confirmPassword=prompt("Confirme le nouveau mot de passe :");
+      if (confirmPassword===null) return;
+      if (newPassword!==confirmPassword) { alert("Les mots de passe ne correspondent pas."); return; }
+      api("POST","/api/me/password",{currentPassword:currentPassword,newPassword:newPassword}).then(function(){
+        alert("Mot de passe modifié.");
+      }).catch(function(e){ alert(e.message); });
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -216,7 +234,7 @@
       '<div id="fiche-modal" style="display:none;"></div>'+
       '<div id="pdf-viewer-overlay" style="display:none;"></div>'+
       '<div id="pdf-viewer-modal" style="display:none;"></div>';
-    document.getElementById("btn-logout").addEventListener("click", logout);
+    bindHeaderEvents();
     root.addEventListener("change", function(e){
       if(e.target && e.target.id==="filtre-acheteur"){ state.filtreAcheteur=e.target.value||null; renderPatronContent(); }
       if(e.target && e.target.id==="filtre-pdf"){ state.filtrePdf=e.target.value||null; renderPatronContent(); }
@@ -263,6 +281,7 @@
     html += '<div class="block"><p class="section-title">Comptes acheteurs</p><div class="chips">';
     state.acheteurs.forEach(function(a){
       html += '<span class="chip">'+esc(a.nom)+' ('+esc(a.username)+')'+
+        '<button class="btn-reset-acheteur-pwd" data-id="'+a.id+'" data-nom="'+esc(a.nom)+'" title="Réinitialiser le mot de passe">🔑</button>'+
         '<button class="btn-del-acheteur" data-id="'+a.id+'" title="Supprimer">×</button></span>';
     });
     html += '</div><div class="row" style="flex-wrap:wrap;">'+
@@ -358,7 +377,7 @@
             var showPrix = r.statut==="achete";
             html += '<div class="patron-prix-wrap field-group" data-uid="'+uid+'" style="'+(showPrix?"":"display:none;")+'">'+
               '<label class="field-label">Prix d\'achat</label>'+
-              '<input class="patron-prix-input" data-uid="'+uid+'" type="text" value="'+esc(r.prix||"")+'" placeholder="ex: 4 200 €" style="width:100%;"/></div>';
+              '<input class="patron-prix-input" data-uid="'+uid+'" type="text" value="'+esc(r.prix||"")+'" placeholder="ex: 4 200 €"/></div>';
 
             // Notes
             html += '<div class="field-group"><label class="field-label">Notes</label>';
@@ -433,6 +452,19 @@
           state.affectations=state.affectations.filter(function(a){return a.acheteurId!==id;});
           state.retours=state.retours.filter(function(r){return r.acheteurId!==id;}); renderPatronContent();
         });
+      });
+    });
+
+    el.querySelectorAll(".btn-reset-acheteur-pwd").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id=btn.getAttribute("data-id");
+        var nom=btn.getAttribute("data-nom");
+        var newPassword=prompt("Nouveau mot de passe pour "+nom+" (4 caractères minimum) :");
+        if (newPassword===null) return;
+        if (!newPassword || newPassword.length<4) { alert("Le mot de passe doit contenir au moins 4 caractères."); return; }
+        api("PATCH","/api/acheteurs/"+id+"/password",{newPassword:newPassword}).then(function(){
+          alert("Mot de passe réinitialisé pour "+nom+".");
+        }).catch(function(e){ alert(e.message); });
       });
     });
 
@@ -513,9 +545,9 @@
 
   // ── EXTRACTION DATES PDF ──────────────────────────────────────────
   var MOIS_FR = {
-    'janvier':0,'fevrier':1,'f\u00e9vrier':1,'mars':2,'avril':3,'mai':4,'juin':5,
-    'juillet':6,'aout':7,'ao\u00fbt':7,'septembre':8,'octobre':9,'novembre':10,
-    'decembre':11,'d\u00e9cembre':11
+    'janvier':0,'fevrier':1,'février':1,'mars':2,'avril':3,'mai':4,'juin':5,
+    'juillet':6,'aout':7,'août':7,'septembre':8,'octobre':9,'novembre':10,
+    'decembre':11,'décembre':11
   };
 
   function extractDateFromText(text) {
@@ -758,7 +790,7 @@
       '<div id="fiche-modal" style="display:none;"></div>'+
       '<div id="pdf-viewer-overlay" style="display:none;"></div>'+
       '<div id="pdf-viewer-modal" style="display:none;"></div>';
-    document.getElementById("btn-logout").addEventListener("click", logout);
+    bindHeaderEvents();
     renderAcheteurContent();
   }
 

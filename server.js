@@ -130,6 +130,28 @@ app.get("/api/me", async function (req, res) {
   res.json({ user: req.session.user || null });
 });
 
+// ---------- CHANGEMENT DE MOT DE PASSE ----------
+app.post("/api/me/password", requireAuth, async function (req, res) {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || String(newPassword).length < 4) {
+    return res.status(400).json({ error: "Le nouveau mot de passe doit contenir au moins 4 caracteres" });
+  }
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    const user = db.users.find(function (u) { return u.id === req.session.user.id; });
+    if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
+    if (!bcrypt.compareSync(currentPassword || "", user.passwordHash)) {
+      return res.status(401).json({ error: "Mot de passe actuel incorrect" });
+    }
+    user.passwordHash = bcrypt.hashSync(newPassword, 10);
+    await saveDb(db);
+    res.json({ ok: true });
+  } finally {
+    release();
+  }
+});
+
 // ---------- PATRON: GESTION ACHETEURS ----------
 app.get("/api/acheteurs", requireAuth, async function (req, res) {
   const db = await loadDb();
@@ -186,6 +208,27 @@ app.delete("/api/acheteurs/:id", requirePatron, async function (req, res) {
     db.retours = db.retours.filter(function (r) {
       return r.acheteurId !== id;
     });
+    await saveDb(db);
+    res.json({ ok: true });
+  } finally {
+    release();
+  }
+});
+
+app.patch("/api/acheteurs/:id/password", requirePatron, async function (req, res) {
+  const { newPassword } = req.body;
+  if (!newPassword || String(newPassword).length < 4) {
+    return res.status(400).json({ error: "Le nouveau mot de passe doit contenir au moins 4 caracteres" });
+  }
+  const release = await acquireWriteLock();
+  try {
+    const db = await loadDb();
+    const id = req.params.id;
+    const user = db.users.find(function (u) {
+      return u.id === id && u.role === "acheteur";
+    });
+    if (!user) return res.status(404).json({ error: "Compte acheteur introuvable" });
+    user.passwordHash = bcrypt.hashSync(newPassword, 10);
     await saveDb(db);
     res.json({ ok: true });
   } finally {
