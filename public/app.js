@@ -56,6 +56,7 @@
   window.openPdfViewer = function(pdfId, pageNum) {
     var pdf = state.pdfs.find(function(p){return p.id===pdfId;});
     if (!pdf) return;
+    saveFocus();
     var overlay = document.getElementById('pdf-viewer-overlay');
     var modal = document.getElementById('pdf-viewer-modal');
     if (!overlay || !modal) return;
@@ -74,6 +75,7 @@
       '</div>';
 
     document.getElementById('btn-pdf-viewer-back').addEventListener('click', closePdfViewer);
+    if (modal.focus) modal.focus();
 
     var canvas = document.getElementById('pdf-viewer-canvas');
     getPdfDoc(url).then(function(doc){ return doc.getPage(pageNum); }).then(function(page){
@@ -97,6 +99,7 @@
     var modal = document.getElementById('pdf-viewer-modal');
     if (overlay) overlay.style.display = 'none';
     if (modal) { modal.style.display = 'none'; modal.innerHTML = ''; }
+    restoreFocus();
   };
 
   // ── UTILS ──────────────────────────────────────────────────────────
@@ -112,6 +115,17 @@
     var d = new Date(iso);
     return d.toLocaleDateString("fr-FR") + " " + d.toLocaleTimeString("fr-FR", {hour:"2-digit",minute:"2-digit"});
   }
+  // ── ACCESSIBILITE DES MODALES (focus) ───────────────────────────────
+  var _lastFocusedEl = null;
+  function saveFocus() { _lastFocusedEl = document.activeElement; }
+  function restoreFocus() {
+    var el = _lastFocusedEl;
+    _lastFocusedEl = null;
+    if (el && typeof el.focus === "function" && document.body.contains(el)) {
+      try { el.focus(); } catch (e) {}
+    }
+  }
+
   // ── FILE D'ATTENTE D'ECRITURE HORS-LIGNE ────────────────────────────
   var OFFLINE_QUEUE_KEY = "foresterra_offline_queue";
   function getOfflineQueue() {
@@ -403,11 +417,11 @@
   function renderPatronApp() {
     root.innerHTML = headerHtml()+'<div id="patron-content"></div>'+
       '<div id="pdf-modal-overlay" style="display:none;"></div>'+
-      '<div id="pdf-modal" style="display:none;"></div>'+
+      '<div id="pdf-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="Selection de pages PDF" tabindex="-1"></div>'+
       '<div id="fiche-modal-overlay" style="display:none;"></div>'+
-      '<div id="fiche-modal" style="display:none;"></div>'+
+      '<div id="fiche-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="Fiche d\'estimation" tabindex="-1"></div>'+
       '<div id="pdf-viewer-overlay" style="display:none;"></div>'+
-      '<div id="pdf-viewer-modal" style="display:none;"></div>';
+      '<div id="pdf-viewer-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="Visionneuse PDF" tabindex="-1"></div>';
     bindHeaderEvents();
     root.addEventListener("change", function(e){
       if(e.target && e.target.id==="filtre-acheteur"){ state.filtreAcheteur=e.target.value||null; renderPatronContent(); }
@@ -795,6 +809,7 @@
   // ══════════════════════════════════════════════════════════════════
   function openPdfPageSelector(pdfId, filename) {
     state.pdfSelectorId=pdfId; state.pdfSelectedPages=[]; state.pdfAssignAcheteurId=null; state.pdfPages=[];
+    saveFocus();
     var overlay=document.getElementById("pdf-modal-overlay");
     var modal=document.getElementById("pdf-modal");
     overlay.style.cssText="display:block;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100;";
@@ -823,6 +838,7 @@
     document.getElementById("btn-modal-confirm").addEventListener("click", confirmPageSelection);
     overlay.addEventListener("click", closePdfModal);
     modal.addEventListener("click", function(e){e.stopPropagation();});
+    if (modal.focus) modal.focus();
     var proxyUrl='/api/proxy-pdf?url='+encodeURIComponent(filename);
     if(typeof pdfjsLib!=='undefined'){
       pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -952,6 +968,7 @@
     if (overlay) overlay.style.display="none";
     if (modal) modal.style.display="none";
     state.pdfSelectedPages=[]; state.pdfAssignAcheteurId=null;
+    restoreFocus();
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -960,11 +977,11 @@
   function renderAcheteurApp() {
     root.innerHTML = headerHtml()+'<div id="acheteur-content"></div>'+
       '<div id="pdf-modal-overlay" style="display:none;"></div>'+
-      '<div id="pdf-modal" style="display:none;"></div>'+
+      '<div id="pdf-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="Selection de pages PDF" tabindex="-1"></div>'+
       '<div id="fiche-modal-overlay" style="display:none;"></div>'+
-      '<div id="fiche-modal" style="display:none;"></div>'+
+      '<div id="fiche-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="Fiche d\'estimation" tabindex="-1"></div>'+
       '<div id="pdf-viewer-overlay" style="display:none;"></div>'+
-      '<div id="pdf-viewer-modal" style="display:none;"></div>';
+      '<div id="pdf-viewer-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="Visionneuse PDF" tabindex="-1"></div>';
     bindHeaderEvents();
     renderAcheteurContent();
   }
@@ -1134,6 +1151,7 @@
   // Sélecteur de pages acheteur
   function openPdfPageSelectorAcheteur(pdfId, filename) {
     state.pdfSelectorId=pdfId; state.pdfSelectedPages=[]; state.pdfPages=[];
+    saveFocus();
     var url='/api/proxy-pdf?url='+encodeURIComponent(filename);
     var overlay=document.getElementById("pdf-modal-overlay");
     var modal  =document.getElementById("pdf-modal");
@@ -1172,6 +1190,7 @@
     overlay.addEventListener("click", closePdfModal);
     modal.addEventListener("click", function(e){e.stopPropagation();});
     document.getElementById("btn-modal-confirm").addEventListener("click", confirmAcheteurPageSelection);
+    if (modal.focus) modal.focus();
 
     if (typeof pdfjsLib==="undefined") {
       document.getElementById("ach-viewer").innerHTML='<p style="color:#f88;text-align:center;padding:40px;">PDF.js non disponible.</p>';
@@ -1361,6 +1380,7 @@
     var modal  =document.getElementById("fiche-modal");
     if (overlay) overlay.style.display="none";
     if (modal)   modal.style.display="none";
+    restoreFocus();
   }
 
 
@@ -1371,6 +1391,7 @@
 // ============================================================
 
 window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
+  saveFocus();
   var overlay = document.getElementById('fiche-modal-overlay');
   var modal = document.getElementById('fiche-modal');
   if (!overlay || !modal) return;
@@ -1861,6 +1882,8 @@ window.openFicheModalEFC=function(parcelle, retour, modeRetour) {
     window.print();
     setTimeout(restore, 1000);
   });
+
+  if (modal.focus) modal.focus();
 }
 
 window.closeFicheModal=function() {
@@ -1868,7 +1891,19 @@ window.closeFicheModal=function() {
   var modal   = document.getElementById('fiche-modal');
   if (overlay) overlay.style.display = 'none';
   if (modal)   modal.style.display   = 'none';
+  restoreFocus();
 }
+
+  // ── ECHAP POUR FERMER LES MODALES OUVERTES ──────────────────────────
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' && e.key !== 'Esc') return;
+    var pdfModal = document.getElementById('pdf-modal');
+    var ficheModal = document.getElementById('fiche-modal');
+    var viewerModal = document.getElementById('pdf-viewer-modal');
+    if (pdfModal && pdfModal.style.display && pdfModal.style.display !== 'none') { closePdfModal(); return; }
+    if (ficheModal && ficheModal.style.display && ficheModal.style.display !== 'none') { window.closeFicheModal(); return; }
+    if (viewerModal && viewerModal.style.display && viewerModal.style.display !== 'none') { window.closePdfViewer(); return; }
+  });
 
   init();
 })();
