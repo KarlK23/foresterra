@@ -9,6 +9,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const { loadDb, saveDb, acquireWriteLock } = require("./db");
+const { mergeRetour } = require("./lib/mergeRetour");
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -363,22 +364,14 @@ app.post("/api/retours", requireAuth, async function (req, res) {
     let retour = db.retours.find(function (r) {
       return r.parcelleId === parcelleId && r.acheteurId === user.id;
     });
+    const isNew = !retour;
 
-    if (!retour) {
-      retour = { id: genId("r"), parcelleId: parcelleId, acheteurId: user.id };
-      db.retours.push(retour);
-    }
-
-    // Mise a jour partielle : un champ absent (undefined) du body conserve sa valeur existante,
-    // ce qui permet a l'appel de sauvegarde de la fiche EFC de ne pas ecraser le reste du retour.
-    retour.description = description !== undefined ? description : (retour.description || "");
-    retour.statut = statut !== undefined ? statut : (retour.statut || "");
-    retour.fiche = fiche !== undefined ? fiche : (retour.fiche || null);
-    retour.ficheEFC = ficheEFC !== undefined ? ficheEFC : (retour.ficheEFC || null);
-    retour.estimation = estimation !== undefined ? estimation : (retour.estimation || "");
-    retour.achete = achete !== undefined ? !!achete : !!retour.achete;
-    retour.prix = retour.achete ? (prix !== undefined ? prix : (retour.prix || "")) : "";
-    retour.date = new Date().toISOString();
+    retour = mergeRetour(
+      retour,
+      { parcelleId: parcelleId, acheteurId: user.id, description: description, estimation: estimation, achete: achete, prix: prix, statut: statut, fiche: fiche, ficheEFC: ficheEFC },
+      genId
+    );
+    if (isNew) db.retours.push(retour);
 
     await saveDb(db);
     res.json({ retour: retour });
@@ -462,22 +455,14 @@ app.post("/api/retours-patron", requirePatron, async function (req, res) {
     let retour = db.retours.find(function (r) {
       return r.parcelleId === parcelleId && r.acheteurId === acheteurId;
     });
+    const isNew = !retour;
 
-    if (!retour) {
-      retour = { id: genId("r"), parcelleId: parcelleId, acheteurId: acheteurId };
-      db.retours.push(retour);
-    }
-
-    // Mise a jour partielle : un champ absent (undefined) du body conserve sa valeur existante,
-    // ce qui permet a l'appel de sauvegarde de la fiche EFC de ne pas ecraser le reste du retour.
-    retour.description = description !== undefined ? description : (retour.description || "");
-    retour.statut = statut !== undefined ? statut : (retour.statut || "");
-    retour.fiche = fiche !== undefined ? fiche : (retour.fiche || null);
-    retour.ficheEFC = ficheEFC !== undefined ? ficheEFC : (retour.ficheEFC || null);
-    retour.estimation = estimation !== undefined ? estimation : (retour.estimation || "");
-    retour.achete = achete !== undefined ? !!achete : !!retour.achete;
-    retour.prix = retour.achete ? (prix !== undefined ? prix : (retour.prix || "")) : "";
-    retour.date = new Date().toISOString();
+    retour = mergeRetour(
+      retour,
+      { parcelleId: parcelleId, acheteurId: acheteurId, description: description, estimation: estimation, achete: achete, prix: prix, statut: statut, fiche: fiche, ficheEFC: ficheEFC },
+      genId
+    );
+    if (isNew) db.retours.push(retour);
 
     await saveDb(db);
     res.json({ retour: retour });
