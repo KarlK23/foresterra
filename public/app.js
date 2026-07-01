@@ -31,11 +31,30 @@
       page.render({canvasContext:canvas.getContext('2d'), viewport:sv});
     }).catch(function(){});
   }
+  var _previewObserver = null;
   function renderAllPagePreviews() {
     setTimeout(function(){
-      document.querySelectorAll('canvas.pdf-preview').forEach(function(c){
-        renderPageCanvas(c, c.getAttribute('data-url'), parseInt(c.getAttribute('data-page')));
-      });
+      var canvases = document.querySelectorAll('canvas.pdf-preview');
+      if (!canvases.length) return;
+      if (typeof IntersectionObserver !== 'undefined') {
+        if (_previewObserver) _previewObserver.disconnect();
+        _previewObserver = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (!entry.isIntersecting) return;
+            var c = entry.target;
+            if (c.getAttribute('data-rendered')) return;
+            c.setAttribute('data-rendered', '1');
+            _previewObserver.unobserve(c);
+            renderPageCanvas(c, c.getAttribute('data-url'), parseInt(c.getAttribute('data-page')));
+          });
+        }, { rootMargin: '200px' });
+        canvases.forEach(function(c) { _previewObserver.observe(c); });
+      } else {
+        // Fallback pour navigateurs sans IntersectionObserver
+        canvases.forEach(function(c){
+          renderPageCanvas(c, c.getAttribute('data-url'), parseInt(c.getAttribute('data-page')));
+        });
+      }
     }, 50);
   }
   function pdfPreviewHtml(pdfId, pageNum) {
@@ -71,7 +90,8 @@
         '<span style="font-size:13px;font-weight:600;color:#2c2c2a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 Page '+pageNum+' — '+esc(pdf.originalName)+'</span>'+
       '</div>'+
       '<div id="pdf-viewer-scroll" style="flex:1;overflow:auto;background:#1c1c1a;text-align:center;-webkit-overflow-scrolling:touch;">'+
-        '<canvas id="pdf-viewer-canvas" style="background:#fff;margin:10px auto;display:block;max-width:100%;box-shadow:0 4px 20px rgba(0,0,0,0.4);"></canvas>'+
+        '<div id="pdf-viewer-spinner" style="color:#fff;padding:40px;font-size:14px;">⏳ Chargement…</div>'+
+        '<canvas id="pdf-viewer-canvas" style="background:#fff;margin:10px auto;display:none;max-width:100%;box-shadow:0 4px 20px rgba(0,0,0,0.4);"></canvas>'+
       '</div>';
 
     document.getElementById('btn-pdf-viewer-back').addEventListener('click', closePdfViewer);
@@ -80,14 +100,18 @@
     var canvas = document.getElementById('pdf-viewer-canvas');
     getPdfDoc(url).then(function(doc){ return doc.getPage(pageNum); }).then(function(page){
       var scrollEl = document.getElementById('pdf-viewer-scroll');
+      var spinner = document.getElementById('pdf-viewer-spinner');
       var maxW = (scrollEl.clientWidth || 400) - 20;
       var vp = page.getViewport({scale:1});
       var fitScale = maxW / vp.width;
-      var pixelRatio = Math.max(2, window.devicePixelRatio || 1);
+      var pixelRatio = Math.min(2, window.devicePixelRatio || 1);
       var sv = page.getViewport({scale: fitScale * pixelRatio});
       canvas.width = sv.width; canvas.height = sv.height;
       canvas.style.width = maxW+'px';
-      page.render({canvasContext:canvas.getContext('2d'), viewport:sv});
+      page.render({canvasContext:canvas.getContext('2d'), viewport:sv}).promise.then(function(){
+        if (spinner) spinner.style.display = 'none';
+        canvas.style.display = 'block';
+      });
     }).catch(function(){
       var scrollEl = document.getElementById('pdf-viewer-scroll');
       if (scrollEl) scrollEl.innerHTML = '<p style="color:#fff;padding:30px;">Impossible de charger le PDF.</p>';

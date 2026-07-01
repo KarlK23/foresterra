@@ -600,6 +600,7 @@ app.get("/api/proxy-pdf", requireAuth, function(req, res) {
   https.get(url, function(r) {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "private, max-age=86400, immutable");
     r.pipe(res);
   }).on("error", function(e) {
     res.status(500).json({ error: e.message });
@@ -621,5 +622,5 @@ app.use(function (err, req, res, next) {
 
 app.use(function(req,res,next){res.setTimeout(300000);next()});
 app.listen(PORT, function () {
-  console.log("Foresterra app demarree sur http://localhost:" + PORT);
+    console.log("Foresterra app demarree sur http://localhost:" + PORT);
 });
