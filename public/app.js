@@ -840,22 +840,28 @@
     modal.style.cssText="display:flex;flex-direction:column;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(96vw,960px);height:90vh;background:#fff;border-radius:14px;z-index:101;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);";
     modal.innerHTML=
       '<div style="padding:14px 20px;border-bottom:1px solid #e0ddd5;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">'+
-        '<div><p style="margin:0;font-weight:600;font-size:15px;">Ventes — triées par date automatiquement</p>'+
-        '<p style="margin:2px 0 0;font-size:12px;color:#6f6e69;">Pages détectées et triées par date de vente</p></div>'+
+        '<div><p style="margin:0;font-weight:600;font-size:15px;">Sélectionner les ventes</p>'+
+        '<p style="margin:2px 0 0;font-size:12px;color:#6f6e69;">Cliquez directement sur une page pour la sélectionner</p></div>'+
         '<button id="btn-close-modal" style="font-size:20px;border:none;background:none;cursor:pointer;color:#6f6e69;padding:4px 8px;">✕</button></div>'+
       '<div class="pdfsel-row" style="display:flex;flex:1;overflow:hidden;">'+
-        '<div style="flex:1;overflow-y:auto;background:#404040;padding:10px;" id="patron-pdf-viewer"><p style="color:#ccc;text-align:center;padding:40px;">Chargement...</p></div>'+
-        '<div class="pdfsel-side" style="width:280px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">'+
+        '<div id="patron-pdf-viewer" style="flex:1;overflow-y:auto;background:#404040;padding:20px;display:flex;flex-direction:column;gap:14px;">'+
+          '<p style="color:#ccc;text-align:center;font-size:13px;padding:40px 0;">Chargement du PDF...</p>'+
+        '</div>'+
+        '<div class="pdfsel-side" style="width:240px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">'+
           '<div style="padding:10px 14px;border-bottom:1px solid #e0ddd5;flex-shrink:0;">'+
             '<p style="margin:0 0 6px;font-size:13px;font-weight:600;">Assigner à :</p>'+
             '<div id="modal-acheteur-list" style="display:flex;flex-direction:column;gap:5px;">'+pdfAcheteurBtns()+'</div></div>'+
-          '<div id="modal-page-list" style="flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:6px;">'+
-            '<p style="color:#6f6e69;font-size:13px;text-align:center;margin-top:20px;">⏳ Analyse des dates en cours…</p></div>'+
+          '<div id="patron-sel-list" style="flex:1;overflow-y:auto;padding:8px 12px;">'+
+            '<p style="color:#a3a098;font-size:12px;margin:0;">Aucune</p>'+
+          '</div>'+
           '<div style="padding:10px 14px;border-top:1px solid #e0ddd5;flex-shrink:0;">'+
-            '<p id="modal-sel-count" style="margin:0 0 6px;font-size:12px;color:#6f6e69;">Aucune vente sélectionnée</p>'+
+            '<p id="modal-sel-count" style="margin:0 0 4px;font-size:12px;color:#6f6e69;">Aucune vente sélectionnée</p>'+
             '<p id="modal-error" style="margin:0 0 6px;font-size:12px;color:#a32d2d;min-height:14px;"></p>'+
             '<button id="btn-modal-confirm" class="primary" style="width:100%;" disabled>Créer les parcelles</button>'+
-            '<button id="btn-modal-cancel" style="width:100%;margin-top:6px;">Annuler</button></div></div></div>';
+            '<button id="btn-modal-cancel" style="width:100%;margin-top:6px;">Annuler</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
 
     document.getElementById("btn-close-modal").addEventListener("click", closePdfModal);
     document.getElementById("btn-modal-cancel").addEventListener("click", closePdfModal);
@@ -863,56 +869,97 @@
     overlay.addEventListener("click", closePdfModal);
     modal.addEventListener("click", function(e){e.stopPropagation();});
     if (modal.focus) modal.focus();
-    var proxyUrl='/api/proxy-pdf?url='+encodeURIComponent(filename);
-    if(typeof pdfjsLib!=='undefined'){
-      pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      pdfjsLib.getDocument(proxyUrl).promise.then(function(doc){
-        var viewer=document.getElementById('patron-pdf-viewer');
-        if(!viewer)return;
-        viewer.innerHTML='';
-        for(var i=1;i<=doc.numPages;i++){(function(n){
-          var c=document.createElement('canvas');
-          c.style.cssText='display:block;width:100%;margin-bottom:8px;background:#fff;';
-          viewer.appendChild(c);
-          doc.getPage(n).then(function(p){
-            var vp=p.getViewport({scale:1});
-            var sc=(viewer.offsetWidth-20)/vp.width;
-            var sv=p.getViewport({scale:sc});
-            c.width=sv.width;c.height=sv.height;
-            p.render({canvasContext:c.getContext('2d'),viewport:sv});
-          });
-        })(i);}
-      }).catch(function(){
-        var v=document.getElementById('patron-pdf-viewer');
-        if(v)v.innerHTML='<p style="color:#f88;text-align:center;padding:40px;">Impossible de charger le PDF.</p>';
-      });
-    }
     bindPdfAcheteurBtns();
-    analyzePdfDates(proxyUrl,
-      function(i,total){
-        var el=document.getElementById("modal-page-list");
-        if(el) el.innerHTML='<p style="color:#6f6e69;font-size:13px;text-align:center;margin-top:20px;">⏳ Lecture page '+i+'/'+total+'…</p>';
-      },
-      function(pages){
-        state.pdfPages=pages||[];
-        refreshPatronPageList();
-      }
-    );
-  }
 
-  function refreshPatronPageList() {
-    var el=document.getElementById("modal-page-list");
-    if (!el) return;
-    if (!state.pdfPages.length) { el.innerHTML='<p style="color:#a3a098;font-size:13px;">Analyse non disponible.</p>'; return; }
-    el.innerHTML=buildPageCards(state.pdfPages, state.pdfSelectedPages);
-    el.querySelectorAll(".pdf-page-card").forEach(function(card){
-      card.addEventListener("click", function(){
-        var num=parseInt(card.getAttribute("data-page"));
-        var idx=state.pdfSelectedPages.indexOf(num);
-        if (idx===-1) state.pdfSelectedPages.push(num); else state.pdfSelectedPages.splice(idx,1);
-        refreshPatronPageList();
-        updatePdfConfirmBtn();
+    var proxyUrl='/api/proxy-pdf?url='+encodeURIComponent(filename);
+    if (typeof pdfjsLib==='undefined') {
+      document.getElementById("patron-pdf-viewer").innerHTML='<p style="color:#f88;text-align:center;padding:40px;">PDF.js non disponible.</p>';
+      return;
+    }
+    pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+    pdfjsLib.getDocument(proxyUrl).promise.then(function(doc){
+      _pdfCache[proxyUrl]=doc;
+      var total=doc.numPages;
+      var viewer=document.getElementById("patron-pdf-viewer");
+      if (!viewer) return;
+      viewer.innerHTML='<p style="color:#ccc;text-align:center;font-size:13px;">Analyse des dates ('+total+' pages)...</p>';
+
+      var datePromises=[];
+      for (var i=1;i<=total;i++){
+        (function(n){
+          datePromises.push(
+            doc.getPage(n).then(function(page){
+              return page.getTextContent().then(function(tc){
+                var text=tc.items.map(function(it){return it.str;}).join(' ');
+                var date=extractDateFromText(text);
+                return {num:n, date:date, dateStr:date?date.toLocaleDateString('fr-FR'):null};
+              });
+            })
+          );
+        })(i);
+      }
+
+      Promise.all(datePromises).then(function(infos){
+        var dated=infos.filter(function(p){return p.date;}).sort(function(a,b){return a.date-b.date;});
+        var undated=infos.filter(function(p){return !p.date;});
+        state.pdfPages=dated.concat(undated);
+
+        viewer=document.getElementById("patron-pdf-viewer");
+        if (!viewer) return;
+        viewer.innerHTML='';
+
+        state.pdfPages.forEach(function(p){
+          var wrap=document.createElement('div');
+          wrap.setAttribute('data-page', p.num);
+          wrap.style.cssText='position:relative;cursor:pointer;border:4px solid transparent;border-radius:6px;overflow:hidden;flex-shrink:0;transition:border-color 0.15s,box-shadow 0.15s;';
+
+          var canvas=document.createElement('canvas');
+          canvas.style.cssText='display:block;width:100%;background:#ddd;';
+
+          var lbl=document.createElement('div');
+          lbl.style.cssText='position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.72);color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;pointer-events:none;';
+          lbl.textContent=p.dateStr?'Vente du '+p.dateStr:'Page '+p.num;
+
+          var chk=document.createElement('div');
+          chk.style.cssText='display:none;position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;background:#0f6e56;color:#fff;font-size:20px;font-weight:700;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.5);pointer-events:none;';
+          chk.innerHTML='v';
+
+          wrap.appendChild(canvas);
+          wrap.appendChild(lbl);
+          wrap.appendChild(chk);
+          viewer.appendChild(wrap);
+
+          doc.getPage(p.num).then(function(page){
+            var vp=page.getViewport({scale:1});
+            var scale=580/vp.width;
+            var sv=page.getViewport({scale:scale});
+            canvas.width=sv.width;
+            canvas.height=sv.height;
+            page.render({canvasContext:canvas.getContext('2d'),viewport:sv});
+          }).catch(function(){});
+
+          wrap.addEventListener('click', function(){
+            var num=parseInt(wrap.getAttribute('data-page'));
+            var idx=state.pdfSelectedPages.indexOf(num);
+            if (idx===-1){
+              state.pdfSelectedPages.push(num);
+              wrap.style.borderColor='#0f6e56';
+              wrap.style.boxShadow='0 0 0 3px #e1f5ee';
+              chk.style.display='flex';
+            } else {
+              state.pdfSelectedPages.splice(idx,1);
+              wrap.style.borderColor='transparent';
+              wrap.style.boxShadow='none';
+              chk.style.display='none';
+            }
+            updatePdfConfirmBtn();
+          });
+        });
       });
+    }).catch(function(){
+      var v=document.getElementById("patron-pdf-viewer");
+      if(v) v.innerHTML='<p style="color:#f88;text-align:center;padding:40px;">Impossible de charger le PDF.</p>';
     });
   }
 
@@ -952,6 +999,7 @@
     var btn=document.getElementById("btn-modal-confirm");
     var errEl=document.getElementById("modal-error");
     var countEl=document.getElementById("modal-sel-count");
+    var list=document.getElementById("patron-sel-list");
     var n=state.pdfSelectedPages.length, hasA=!!state.pdfAssignAcheteurId;
     if (countEl) countEl.textContent=n>0?n+" vente(s) sélectionnée(s)":"Aucune vente sélectionnée";
     if (errEl) {
@@ -960,6 +1008,15 @@
       else errEl.textContent="";
     }
     if (btn) btn.disabled=!(n>0&&hasA);
+    if (list) {
+      if (!n) { list.innerHTML='<p style="color:#a3a098;font-size:12px;margin:0;">Aucune</p>'; return; }
+      var ordered=state.pdfPages.filter(function(p){return state.pdfSelectedPages.indexOf(p.num)!==-1;});
+      list.innerHTML=ordered.map(function(p){
+        return '<div style="padding:5px 0;border-bottom:1px solid #e0ddd5;font-size:11px;">'+
+          '<strong>Page '+p.num+'</strong>'+(p.dateStr?'<br><span style="color:#0f6e56;">'+p.dateStr+'</span>':'')+
+          '</div>';
+      }).join('');
+    }
   }
   function confirmPageSelection() {
     // Trier les pages sélectionnées selon l'ordre date (pdfPages est déjà trié par date)
